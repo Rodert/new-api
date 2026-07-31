@@ -13,26 +13,54 @@ import (
 )
 
 func Playground(c *gin.Context) {
-	var newAPIError *types.NewAPIError
+	if newAPIError := preparePlaygroundRelay(c, types.RelayFormatOpenAI); newAPIError != nil {
+		c.JSON(newAPIError.StatusCode, gin.H{"error": newAPIError.ToOpenAIError()})
+		return
+	}
 
-	defer func() {
-		if newAPIError != nil {
-			c.JSON(newAPIError.StatusCode, gin.H{
-				"error": newAPIError.ToOpenAIError(),
-			})
-		}
-	}()
+	Relay(c, types.RelayFormatOpenAI)
+}
+
+func PlaygroundImage(c *gin.Context) {
+	if newAPIError := preparePlaygroundRelay(c, types.RelayFormatOpenAIImage); newAPIError != nil {
+		c.JSON(newAPIError.StatusCode, gin.H{"error": newAPIError.ToOpenAIError()})
+		return
+	}
+
+	Relay(c, types.RelayFormatOpenAIImage)
+}
+
+func PlaygroundTask(c *gin.Context) {
+	if newAPIError := preparePlaygroundRelay(c, types.RelayFormatTask); newAPIError != nil {
+		c.JSON(newAPIError.StatusCode, gin.H{"error": newAPIError.ToOpenAIError()})
+		return
+	}
+
+	RelayTask(c)
+}
+
+func PlaygroundTaskFetch(c *gin.Context) {
+	if newAPIError := preparePlaygroundRelay(c, types.RelayFormatTask); newAPIError != nil {
+		c.JSON(newAPIError.StatusCode, gin.H{"error": newAPIError.ToOpenAIError()})
+		return
+	}
+
+	RelayTaskFetch(c)
+}
+
+func preparePlaygroundRelay(c *gin.Context, relayFormat types.RelayFormat) *types.NewAPIError {
+	var newAPIError *types.NewAPIError
 
 	useAccessToken := c.GetBool("use_access_token")
 	if useAccessToken {
 		newAPIError = types.NewError(errors.New("暂不支持使用 access token"), types.ErrorCodeAccessDenied, types.ErrOptionWithSkipRetry())
-		return
+		return newAPIError
 	}
 
-	relayInfo, err := relaycommon.GenRelayInfo(c, types.RelayFormatOpenAI, nil, nil)
+	relayInfo, err := relaycommon.GenRelayInfo(c, relayFormat, nil, nil)
 	if err != nil {
 		newAPIError = types.NewError(err, types.ErrorCodeInvalidRequest, types.ErrOptionWithSkipRetry())
-		return
+		return newAPIError
 	}
 
 	userId := c.GetInt("id")
@@ -41,7 +69,7 @@ func Playground(c *gin.Context) {
 	userCache, err := model.GetUserCache(userId)
 	if err != nil {
 		newAPIError = types.NewError(err, types.ErrorCodeQueryDataError, types.ErrOptionWithSkipRetry())
-		return
+		return newAPIError
 	}
 	userCache.WriteContext(c)
 
@@ -52,5 +80,5 @@ func Playground(c *gin.Context) {
 	}
 	_ = middleware.SetupContextForToken(c, tempToken)
 
-	Relay(c, types.RelayFormatOpenAI)
+	return nil
 }

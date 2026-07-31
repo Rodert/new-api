@@ -115,6 +115,45 @@ export interface ChatCompletionResponse {
   }
 }
 
+export interface ImageGenerationRequest {
+  model: string
+  group?: string
+  prompt: string
+  n: number
+  size: string
+  quality?: string
+  images?: string[]
+}
+
+export interface ImageGenerationResponse {
+  data: Array<{
+    url?: string
+    b64_json?: string
+    revised_prompt?: string
+  }>
+}
+
+export interface VideoGenerationRequest {
+  model: string
+  group?: string
+  prompt: string
+  image?: string
+  duration: number
+  width: number
+  height: number
+  n: number
+}
+
+export interface VideoTaskResponse {
+  task_id?: string
+  id?: string
+  status?: string
+  url?: string
+  error?: {
+    message?: string
+  }
+}
+
 // Configuration types
 export interface PlaygroundConfig {
   model: string
