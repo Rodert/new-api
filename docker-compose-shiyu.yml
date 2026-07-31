@@ -1,0 +1,73 @@
+services:
+  new-api:
+    image: ghcr.io/rodert/new-api:shiyu-newapi
+    container_name: shiyu-newapi
+    restart: unless-stopped
+    command: --log-dir /app/logs
+    ports:
+      - "3000:3000"
+    volumes:
+      - shiyu_data:/data
+      - shiyu_logs:/app/logs
+    environment:
+      # Change the default passwords below before deploying to production.
+      SQL_DSN: postgresql://root:123456@postgres:5432/new-api
+      REDIS_CONN_STRING: redis://:123456@redis:6379
+      TZ: Asia/Shanghai
+      ERROR_LOG_ENABLED: "true"
+      BATCH_UPDATE_ENABLED: "true"
+      NODE_NAME: shiyu-newapi-node-1
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    networks:
+      - shiyu-network
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://localhost:3000/api/status | grep -o '\"success\":\\s*true' || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  redis:
+    image: redis:7-alpine
+    container_name: shiyu-newapi-redis
+    restart: unless-stopped
+    command: ["redis-server", "--requirepass", "123456"]
+    volumes:
+      - shiyu_redis_data:/data
+    networks:
+      - shiyu-network
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli --no-auth-warning -a 123456 ping | grep PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+  postgres:
+    image: postgres:15-alpine
+    container_name: shiyu-newapi-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: root
+      POSTGRES_PASSWORD: 123456
+      POSTGRES_DB: new-api
+    volumes:
+      - shiyu_postgres_data:/var/lib/postgresql/data
+    networks:
+      - shiyu-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  shiyu_data:
+  shiyu_logs:
+  shiyu_redis_data:
+  shiyu_postgres_data:
+
+networks:
+  shiyu-network:
+    driver: bridge
