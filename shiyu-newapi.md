@@ -18,6 +18,8 @@ git push origin shiyu-newapi
 
 ```text
 ghcr.io/rodert/new-api:shiyu-newapi
+ghcr.io/rodert/new-api:build-YYYYMMDD-HHMMSS
+ghcr.io/rodert/new-api:sha-<提交短 SHA>
 ```
 
 首次构建成功后，在 GitHub Packages 将该镜像设为 Public。

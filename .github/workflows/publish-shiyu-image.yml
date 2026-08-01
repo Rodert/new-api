@@ -40,6 +40,7 @@ jobs:
           images: ghcr.io/rodert/new-api
           tags: |
             type=sha,prefix=sha-
+            type=raw,value=build-{{date 'YYYYMMDD-HHmmss' tz='Asia/Shanghai'}}
             type=raw,value=shiyu-newapi
 
       - name: Build and push multi-platform image
