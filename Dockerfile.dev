@@ -12,6 +12,9 @@ ENV GOEXPERIMENT=greenteagc
 WORKDIR /build
 
 ADD go.mod go.sum ./
+# relaykit is a local module referenced through a replace directive. Copy its
+# module manifest before downloading dependencies so Docker builds remain cached.
+ADD relaykit/go.mod ./relaykit/go.mod
 RUN go mod download
 
 COPY . .

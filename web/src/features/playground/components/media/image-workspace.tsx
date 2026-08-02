@@ -16,15 +16,30 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { ImagePlusIcon, LoaderCircleIcon, SparklesIcon, XIcon } from 'lucide-react'
+import {
+  ImageIcon,
+  ImagePlusIcon,
+  LoaderCircleIcon,
+  SparklesIcon,
+  Trash2Icon,
+  UploadIcon,
+  XIcon,
+} from 'lucide-react'
 import { useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
-import { ModelGroupSelector } from '@/components/model-group-selector'
+import { GroupSelector, ModelSelector } from '@/components/model-group-selector'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
-import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 
 import { generateImage } from '../../api'
@@ -46,6 +61,28 @@ type ImageWorkspaceProps = {
   ) => void
 }
 
+const maxReferenceImages = 14
+const imageSizeOptions = [
+  { label: '1:1', value: '1024x1024' },
+  { label: '16:9', value: '1792x1024' },
+  { label: '9:16', value: '1024x1792' },
+  { label: '4:3', value: '1024x768' },
+  { label: '3:4', value: '768x1024' },
+]
+const imageQualityOptions = [
+  { label: 'auto', labelKey: 'Auto', value: 'auto' },
+  { label: 'fast', labelKey: 'Fast', value: 'fast' },
+  { label: 'hd', labelKey: 'HD', value: 'hd' },
+  { label: '4k', labelKey: '4K', value: '4k' },
+]
+const imageQuantityOptions = Array.from(
+  { length: 10 },
+  (_, index) => index + 1
+).map((value) => ({
+  label: String(value),
+  value: String(value),
+}))
+
 export function ImageWorkspace({
   config,
   groups,
@@ -57,7 +94,7 @@ export function ImageWorkspace({
   const inputRef = useRef<HTMLInputElement>(null)
   const [prompt, setPrompt] = useState('')
   const [size, setSize] = useState('1024x1024')
-  const [quality, setQuality] = useState('standard')
+  const [quality, setQuality] = useState('auto')
   const [quantity, setQuantity] = useState(1)
   const [references, setReferences] = useState<string[]>([])
   const [result, setResult] = useState<ImageGenerationResponse | null>(null)
@@ -66,18 +103,32 @@ export function ImageWorkspace({
   const handleFiles = async (files: FileList | null) => {
     if (!files?.length) return
 
-    const nextReferences = await Promise.all(
-      Array.from(files).map(
-        (file) =>
-          new Promise<string>((resolve, reject) => {
-            const reader = new FileReader()
-            reader.onload = () => resolve(String(reader.result))
-            reader.onerror = () => reject(reader.error)
-            reader.readAsDataURL(file)
-          })
+    try {
+      const nextReferences = await Promise.all(
+        [...files].map(
+          (file) =>
+            new Promise<string>((resolve, reject) => {
+              const reader = new FileReader()
+              reader.addEventListener(
+                'load',
+                () => resolve(String(reader.result)),
+                {
+                  once: true,
+                }
+              )
+              reader.addEventListener('error', () => reject(reader.error), {
+                once: true,
+              })
+              reader.readAsDataURL(file)
+            })
+        )
       )
-    )
-    setReferences((current) => [...current, ...nextReferences].slice(0, 4))
+      setReferences((current) =>
+        [...current, ...nextReferences].slice(0, maxReferenceImages)
+      )
+    } catch {
+      toast.error(t('Unable to read image'))
+    }
   }
 
   const handleGenerate = async () => {
@@ -91,7 +142,7 @@ export function ImageWorkspace({
         prompt: prompt.trim(),
         n: quantity,
         size,
-        quality,
+        ...(quality !== 'auto' ? { quality } : {}),
         ...(references.length > 0 ? { images: references } : {}),
       })
       setResult(response)
@@ -102,173 +153,270 @@ export function ImageWorkspace({
     }
   }
 
+  const handleClear = () => {
+    setPrompt('')
+    setReferences([])
+    setResult(null)
+  }
+
   const images = result?.data ?? []
 
   return (
-    <div className='grid min-h-0 flex-1 overflow-auto lg:grid-cols-[22rem_minmax(0,1fr)]'>
-      <section className='border-border/70 bg-muted/15 flex min-h-0 flex-col border-b p-4 lg:border-r lg:border-b-0'>
-        <div className='space-y-4 overflow-y-auto pr-1'>
-          <ModelGroupSelector
-            disabled={isGenerating || isModelLoading}
-            groups={groups}
-            models={models}
-            onGroupChange={(value) => onConfigChange('group', value)}
-            onModelChange={(value) => onConfigChange('model', value)}
-            selectedGroup={config.group}
-            selectedModel={config.model}
-          />
-
-          <div className='space-y-2'>
-            <Label htmlFor='image-prompt'>{t('Prompt')}</Label>
-            <Textarea
-              disabled={isGenerating}
-              id='image-prompt'
-              onChange={(event) => setPrompt(event.target.value)}
-              placeholder={t('Describe the image you want to create')}
-              value={prompt}
-            />
+    <div className='flex min-h-0 flex-1 flex-col overflow-hidden'>
+      <header className='border-border/70 shrink-0 border-b px-4 py-3 md:px-6'>
+        <div className='mx-auto flex w-full max-w-7xl items-center justify-between gap-3'>
+          <div className='flex items-center gap-2 text-sm font-semibold'>
+            <ImageIcon className='size-4' />
+            {t('Image')}
           </div>
+          <Button
+            disabled={
+              isGenerating || (!prompt && !result && references.length === 0)
+            }
+            onClick={handleClear}
+            size='sm'
+            type='button'
+            variant='ghost'
+          >
+            <Trash2Icon />
+            {t('Clear')}
+          </Button>
+        </div>
+      </header>
+      <div className='flex-1 overflow-y-auto px-4 py-4 md:px-6'>
+        <div className='mx-auto grid w-full max-w-7xl gap-4 lg:grid-cols-[minmax(23rem,28rem)_minmax(0,1fr)] xl:grid-cols-[minmax(24rem,30rem)_minmax(0,1fr)]'>
+          <section className='bg-background grid h-fit gap-4 rounded-lg border p-4'>
+            <div className='flex items-center gap-2'>
+              <GroupSelector
+                disabled={isGenerating || isModelLoading}
+                groups={groups}
+                onGroupChange={(value) => onConfigChange('group', value)}
+                selectedGroup={config.group}
+              />
+              <ModelSelector
+                disabled={isGenerating || isModelLoading}
+                models={models}
+                onModelChange={(value) => onConfigChange('model', value)}
+                selectedModel={config.model}
+              />
+            </div>
 
-          <div className='grid grid-cols-2 gap-3'>
-            <label className='space-y-2 text-sm font-medium'>
-              {t('Image size')}
-              <NativeSelect
+            <div className='grid gap-1.5'>
+              <Label className='text-xs' htmlFor='image-prompt'>
+                {t('Creative description')}
+              </Label>
+              <Textarea
+                className='min-h-36 resize-none'
                 disabled={isGenerating}
-                onChange={(event) => setSize(event.target.value)}
-                value={size}
-              >
-                <NativeSelectOption value='1024x1024'>1:1</NativeSelectOption>
-                <NativeSelectOption value='1536x1024'>3:2</NativeSelectOption>
-                <NativeSelectOption value='1024x1536'>2:3</NativeSelectOption>
-              </NativeSelect>
-            </label>
-            <label className='space-y-2 text-sm font-medium'>
-              {t('Image quality')}
-              <NativeSelect
-                disabled={isGenerating}
-                onChange={(event) => setQuality(event.target.value)}
-                value={quality}
-              >
-                <NativeSelectOption value='standard'>
-                  {t('Standard')}
-                </NativeSelectOption>
-                <NativeSelectOption value='hd'>HD</NativeSelectOption>
-              </NativeSelect>
-            </label>
-            <label className='space-y-2 text-sm font-medium'>
-              {t('Quantity')}
-              <NativeSelect
-                disabled={isGenerating}
-                onChange={(event) => setQuantity(Number(event.target.value))}
-                value={quantity}
-              >
-                {[1, 2, 3, 4].map((value) => (
-                  <NativeSelectOption key={value} value={value}>
-                    {value}
-                  </NativeSelectOption>
-                ))}
-              </NativeSelect>
-            </label>
-          </div>
+                id='image-prompt'
+                maxLength={5000}
+                onChange={(event) => setPrompt(event.target.value)}
+                placeholder={t('Describe the image you want to create')}
+                value={prompt}
+              />
+            </div>
 
-          <div className='space-y-2'>
-            <Label>{t('Reference images')}</Label>
-            <input
-              accept='image/*'
-              className='sr-only'
-              multiple
-              onChange={(event) => {
-                void handleFiles(event.target.files)
-                event.currentTarget.value = ''
-              }}
-              ref={inputRef}
-              type='file'
-            />
-            <div className='flex flex-wrap gap-2'>
-              {references.map((reference, index) => (
-                <div className='relative size-14' key={reference}>
-                  <img
-                    alt={t('Reference image {{index}}', { index: index + 1 })}
-                    className='size-full rounded-md border object-cover'
-                    src={reference}
-                  />
-                  <Button
-                    aria-label={t('Remove reference image {{index}}', {
-                      index: index + 1,
-                    })}
-                    className='absolute -top-2 -right-2 bg-background shadow-sm'
-                    disabled={isGenerating}
-                    onClick={() =>
-                      setReferences((current) =>
-                        current.filter((_, currentIndex) => currentIndex !== index)
-                      )
-                    }
-                    size='icon-xs'
-                    type='button'
-                    variant='outline'
-                  >
-                    <XIcon />
-                  </Button>
-                </div>
-              ))}
-              {references.length < 4 && (
-                <Button
+            <div className='grid grid-cols-2 gap-3 md:grid-cols-3'>
+              <label className='text-muted-foreground grid gap-1.5 text-xs font-medium'>
+                {t('Aspect ratio')}
+                <Select
                   disabled={isGenerating}
+                  items={imageSizeOptions}
+                  onValueChange={(value) => {
+                    if (value) setSize(value)
+                  }}
+                  value={size}
+                >
+                  <SelectTrigger className='w-full'>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      {imageSizeOptions.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+              </label>
+              <label className='text-muted-foreground grid gap-1.5 text-xs font-medium'>
+                {t('Clarity')}
+                <Select
+                  disabled={isGenerating}
+                  items={imageQualityOptions}
+                  onValueChange={(value) => {
+                    if (value) setQuality(value)
+                  }}
+                  value={quality}
+                >
+                  <SelectTrigger className='w-full'>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      {imageQualityOptions.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {t(option.labelKey)}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+              </label>
+              <label className='text-muted-foreground grid gap-1.5 text-xs font-medium'>
+                {t('Quantity')}
+                <Select
+                  disabled={isGenerating}
+                  items={imageQuantityOptions}
+                  onValueChange={(value) => setQuantity(Number(value))}
+                  value={String(quantity)}
+                >
+                  <SelectTrigger className='w-full'>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      {imageQuantityOptions.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+              </label>
+            </div>
+
+            <div className='bg-muted/20 rounded-md border p-3'>
+              <div className='flex items-center justify-between gap-3'>
+                <Label>
+                  <ImagePlusIcon className='size-4' />
+                  {t('Reference images')}
+                  <span className='text-muted-foreground bg-muted rounded-full px-1.5 py-0.5 text-xs'>
+                    {references.length}/{maxReferenceImages}
+                  </span>
+                </Label>
+                <input
+                  accept='image/png,image/jpeg,image/webp'
+                  className='sr-only'
+                  multiple
+                  onChange={(event) => {
+                    void handleFiles(event.target.files)
+                    event.currentTarget.value = ''
+                  }}
+                  ref={inputRef}
+                  type='file'
+                />
+                <Button
+                  disabled={
+                    isGenerating || references.length >= maxReferenceImages
+                  }
                   onClick={() => inputRef.current?.click()}
-                  size='icon-lg'
+                  size='sm'
                   type='button'
                   variant='outline'
                 >
-                  <ImagePlusIcon />
-                  <span className='sr-only'>{t('Add reference images')}</span>
+                  <UploadIcon />
+                  {t('Upload')}
                 </Button>
+              </div>
+              {references.length > 0 ? (
+                <div className='mt-3 flex flex-wrap gap-2'>
+                  {references.map((reference, index) => (
+                    <div className='relative size-14' key={reference}>
+                      <img
+                        alt={t('Reference image {{index}}', {
+                          index: index + 1,
+                        })}
+                        className='size-full rounded-md border object-cover'
+                        src={reference}
+                      />
+                      <Button
+                        aria-label={t('Remove reference image {{index}}', {
+                          index: index + 1,
+                        })}
+                        className='bg-background absolute -top-2 -right-2 shadow-sm'
+                        disabled={isGenerating}
+                        onClick={() =>
+                          setReferences((current) =>
+                            current.filter(
+                              (_, currentIndex) => currentIndex !== index
+                            )
+                          )
+                        }
+                        size='icon-xs'
+                        type='button'
+                        variant='outline'
+                      >
+                        <XIcon />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className='border-border bg-muted/40 text-muted-foreground mt-3 rounded-md border px-3 py-2 text-xs leading-relaxed'>
+                  {t('Optional reference media')}
+                </p>
               )}
             </div>
-          </div>
-        </div>
-        <Button
-          className='mt-4 w-full'
-          disabled={isGenerating || !prompt.trim() || !config.model}
-          onClick={() => void handleGenerate()}
-          size='lg'
-          type='button'
-        >
-          {isGenerating ? (
-            <LoaderCircleIcon className='animate-spin' />
-          ) : (
-            <SparklesIcon />
-          )}
-          {isGenerating ? t('Generating...') : t('Create image')}
-        </Button>
-      </section>
 
-      <section className='flex min-h-[24rem] min-w-0 flex-1 items-center justify-center p-4 md:p-6'>
-        {images.length > 0 ? (
-          <div className='grid w-full max-w-5xl gap-4 sm:grid-cols-2'>
-            {images.map((image, index) => (
-              <img
-                alt={
-                  image.revised_prompt ||
-                  t('Generated image {{index}}', { index: index + 1 })
-                }
-                className='aspect-square w-full rounded-lg border bg-muted object-contain'
-                key={image.url || image.b64_json || index}
-                src={
-                  image.url ||
-                  (image.b64_json
-                    ? `data:image/png;base64,${image.b64_json}`
-                    : undefined)
-                }
-              />
-            ))}
-          </div>
-        ) : (
-          <div className='text-muted-foreground flex flex-col items-center gap-3 text-center text-sm'>
-            <ImagePlusIcon className='size-9' />
-            <span>{t('Generated images appear here')}</span>
-          </div>
-        )}
-      </section>
+            {!isModelLoading && models.length === 0 && (
+              <p className='border-border bg-muted/40 text-muted-foreground rounded-md border px-3 py-2 text-xs leading-relaxed'>
+                {t(
+                  'No models are available for this group. Choose another group or ask an administrator to enable a compatible model.'
+                )}
+              </p>
+            )}
+            <Button
+              className='w-full'
+              disabled={isGenerating || !prompt.trim() || !config.model}
+              onClick={() => void handleGenerate()}
+              size='lg'
+              type='button'
+            >
+              {isGenerating ? (
+                <LoaderCircleIcon className='animate-spin' />
+              ) : (
+                <SparklesIcon />
+              )}
+              {isGenerating ? t('Generating...') : t('Create image')}
+            </Button>
+          </section>
+
+          <section className='border-border/70 flex min-h-80 min-w-0 items-center justify-center rounded-lg border border-dashed p-8 text-center'>
+            {images.length > 0 ? (
+              <div className='grid w-full max-w-5xl gap-4 sm:grid-cols-2'>
+                {images.map((image, index) => (
+                  <img
+                    alt={
+                      image.revised_prompt ||
+                      t('Generated image {{index}}', { index: index + 1 })
+                    }
+                    className='bg-muted aspect-square w-full rounded-lg border object-contain'
+                    key={image.url || image.b64_json || index}
+                    src={
+                      image.url ||
+                      (image.b64_json
+                        ? `data:image/png;base64,${image.b64_json}`
+                        : undefined)
+                    }
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className='text-muted-foreground flex flex-col items-center gap-2 text-center text-sm'>
+                <ImageIcon className='size-9' />
+                <strong className='text-foreground'>
+                  {t('No images yet')}
+                </strong>
+                <span>{t('Generated images appear here')}</span>
+              </div>
+            )}
+          </section>
+        </div>
+      </div>
     </div>
   )
 }

@@ -1,0 +1,77 @@
+# Local production-like playground preview.
+#
+# Usage:
+#   docker compose -f docker-compose-playground.yml up --build -d
+#   open http://localhost:3002/playground
+#
+# Stop and remove local preview data:
+#   docker compose -f docker-compose-playground.yml down -v
+
+name: playground-preview
+
+services:
+  new-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: new-api-playground:local
+    container_name: new-api-playground
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3002:3000"
+    volumes:
+      - playground_data:/data
+    environment:
+      SQL_DSN: postgresql://root:123456@postgres:5432/new-api
+      REDIS_CONN_STRING: redis://:123456@redis:6379
+      TZ: Asia/Shanghai
+      SESSION_COOKIE_SECURE: "false"
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    networks:
+      - playground-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: new-api-playground-redis
+    restart: unless-stopped
+    command: ["redis-server", "--requirepass", "123456"]
+    volumes:
+      - playground_redis_data:/data
+    networks:
+      - playground-network
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli --no-auth-warning -a 123456 ping | grep PONG"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: new-api-playground-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: root
+      POSTGRES_PASSWORD: 123456
+      POSTGRES_DB: new-api
+    volumes:
+      - playground_postgres_data:/var/lib/postgresql/data
+    networks:
+      - playground-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  playground_data:
+  playground_redis_data:
+  playground_postgres_data:
+
+networks:
+  playground-network:
+    driver: bridge

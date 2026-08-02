@@ -142,6 +142,7 @@ export interface VideoGenerationRequest {
   width: number
   height: number
   n: number
+  quality?: string
 }
 
 export interface VideoTaskResponse {

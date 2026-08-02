@@ -54,7 +54,7 @@ export function MediaWorkspace(props: MediaWorkspaceProps) {
   return (
     <Tabs className='size-full' defaultValue='chat'>
       <div className='border-border/70 bg-background/80 flex h-12 shrink-0 items-center border-b px-3 backdrop-blur md:px-5'>
-        <TabsList className='h-8 bg-transparent p-0' variant='line'>
+        <TabsList className='h-8'>
           <TabsTrigger value='chat'>
             <MessageSquareIcon />
             {t('Chat')}
