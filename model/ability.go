@@ -3,6 +3,7 @@ package model
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 
@@ -45,6 +46,47 @@ func GetGroupEnabledModels(group string) []string {
 	// Find distinct models
 	DB.Table("abilities").Where(commonGroupCol+" = ? and enabled = ?", group, true).Distinct("model").Pluck("model", &models)
 	return models
+}
+
+// GetGroupsEnabledModelEndpointTypes returns the endpoint capabilities of
+// enabled models through the channels available to the supplied groups.
+func GetGroupsEnabledModelEndpointTypes(groups []string) (map[string][]constant.EndpointType, error) {
+	groups = normalizeLookupValues(groups)
+	result := make(map[string][]constant.EndpointType)
+	if len(groups) == 0 {
+		return result, nil
+	}
+
+	type abilityChannel struct {
+		Model         string
+		ChannelType   int
+		OtherSettings string
+	}
+	var rows []abilityChannel
+	err := DB.Table("abilities").
+		Select("abilities.model as model, channels.type as channel_type, channels.settings as other_settings").
+		Joins("JOIN channels ON abilities.channel_id = channels.id").
+		Where("abilities."+commonGroupCol+" IN ? AND abilities.enabled = ? AND channels.status = ?", groups, true, common.ChannelStatusEnabled).
+		Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+
+	for _, row := range rows {
+		endpointTypes := common.GetEndpointTypesByChannelType(row.ChannelType, row.Model)
+		if row.ChannelType == constant.ChannelTypeAdvancedCustom {
+			settings := dto.ChannelOtherSettings{}
+			if err := common.UnmarshalJsonStr(row.OtherSettings, &settings); err == nil && settings.AdvancedCustom != nil {
+				endpointTypes = settings.AdvancedCustom.SupportedEndpointTypesForModel(row.Model)
+			}
+		}
+		for _, endpointType := range endpointTypes {
+			if !slices.Contains(result[row.Model], endpointType) {
+				result[row.Model] = append(result[row.Model], endpointType)
+			}
+		}
+	}
+	return result, nil
 }
 
 func GetEnabledModels() []string {

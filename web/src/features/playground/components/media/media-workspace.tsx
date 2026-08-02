@@ -11,15 +11,16 @@ import { useTranslation } from 'react-i18next'
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
-import { PlaygroundChat } from '../chat/playground-chat'
-import { PlaygroundInput } from '../input/playground-input'
 import type {
   GroupOption,
   Message,
   ModelOption,
   ParameterEnabled,
   PlaygroundConfig,
+  PlaygroundMode,
 } from '../../types'
+import { PlaygroundChat } from '../chat/playground-chat'
+import { PlaygroundInput } from '../input/playground-input'
 import { ImageWorkspace } from './image-workspace'
 import { VideoWorkspace } from './video-workspace'
 
@@ -30,6 +31,7 @@ type MediaWorkspaceProps = {
   isLoadingMessages: boolean
   isModelLoading: boolean
   messages: Message[]
+  mode: PlaygroundMode
   models: ModelOption[]
   parameterEnabled: ParameterEnabled
   onClearMessages: () => void
@@ -37,10 +39,14 @@ type MediaWorkspaceProps = {
     key: K,
     value: PlaygroundConfig[K]
   ) => void
+  onModeChange: (mode: PlaygroundMode) => void
   onDeleteMessage: (message: Message) => void
   onEditMessage: (message: Message) => void
   onEditOpenChange: (open: boolean) => void
-  onParameterEnabledChange: (key: keyof ParameterEnabled, value: boolean) => void
+  onParameterEnabledChange: (
+    key: keyof ParameterEnabled,
+    value: boolean
+  ) => void
   onRegenerateMessage: (message: Message) => void
   onSaveEdit: (content: string, submit: boolean) => void
   onSendMessage: (content: string) => void
@@ -52,7 +58,11 @@ export function MediaWorkspace(props: MediaWorkspaceProps) {
   const { t } = useTranslation()
 
   return (
-    <Tabs className='size-full' defaultValue='chat'>
+    <Tabs
+      className='size-full'
+      onValueChange={(value) => props.onModeChange(value as PlaygroundMode)}
+      value={props.mode}
+    >
       <div className='border-border/70 bg-background/80 flex h-12 shrink-0 items-center border-b px-3 backdrop-blur md:px-5'>
         <TabsList className='h-8'>
           <TabsTrigger value='chat'>

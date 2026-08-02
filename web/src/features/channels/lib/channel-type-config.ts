@@ -164,6 +164,16 @@ export const CHANNEL_TYPE_CONFIGS: Record<number, ChannelTypeConfig> = {
       models: 'Models',
     },
   },
+  1000: {
+    id: 1000,
+    name: CHANNEL_TYPES[1000],
+    icon: 'Jimeng',
+    hints: {
+      baseUrl: 'Base URL is required for this channel type',
+      key: 'Enter API key for this channel',
+      models: 'video-ds-2.0,video-ds-2.0-fast,as-sd2.0-fast',
+    },
+  },
 }
 
 /**

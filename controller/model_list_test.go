@@ -215,6 +215,45 @@ func TestGetUserModelsFiltersByRequestedGroup(t *testing.T) {
 	require.Empty(t, decodeUserModelsResponse(t, vipRecorder))
 }
 
+func TestGetUserModelsFiltersByPlaygroundMode(t *testing.T) {
+	db := setupModelListControllerTestDB(t)
+	require.NoError(t, db.Create(&model.User{
+		Id:       1003,
+		Username: "playground-mode-user",
+		Password: "password",
+		Group:    "default",
+		Status:   common.UserStatusEnabled,
+	}).Error)
+	require.NoError(t, db.Create(&[]model.Channel{
+		{Id: 11, Type: constant.ChannelTypeOpenAI, Key: "chat-key", Status: common.ChannelStatusEnabled},
+		{Id: 12, Type: constant.ChannelTypeOpenAI, Key: "image-key", Status: common.ChannelStatusEnabled},
+		{Id: 13, Type: constant.ChannelTypeJimengZZVideo, Key: "video-key", Status: common.ChannelStatusEnabled},
+	}).Error)
+	require.NoError(t, db.Create(&[]model.Ability{
+		{Group: "default", Model: "gpt-4o", ChannelId: 11, Enabled: true},
+		{Group: "default", Model: "gpt-image-2", ChannelId: 12, Enabled: true},
+		{Group: "default", Model: "as-sd2.0-fast", ChannelId: 13, Enabled: true},
+	}).Error)
+
+	for _, testCase := range []struct {
+		mode   string
+		models []string
+	}{
+		{mode: "chat", models: []string{"gpt-4o"}},
+		{mode: "image", models: []string{"gpt-image-2"}},
+		{mode: "video", models: []string{"as-sd2.0-fast"}},
+	} {
+		recorder := httptest.NewRecorder()
+		context, _ := gin.CreateTestContext(recorder)
+		context.Request = httptest.NewRequest(http.MethodGet, "/api/user/models?group=default&mode="+testCase.mode, nil)
+		context.Set("id", 1003)
+
+		GetUserModels(context)
+
+		require.ElementsMatch(t, testCase.models, decodeUserModelsResponse(t, recorder))
+	}
+}
+
 func TestGetUserModelsExpandsAutoGroupsInConfiguredOrder(t *testing.T) {
 	originalAutoGroups := setting.AutoGroups2JsonString()
 	originalUsableGroups := setting.UserUsableGroups2JSONString()

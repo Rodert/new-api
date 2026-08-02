@@ -26,6 +26,7 @@ import type {
   ImageGenerationResponse,
   ModelOption,
   GroupOption,
+  PlaygroundMode,
   VideoGenerationRequest,
   VideoTaskResponse,
 } from './types'
@@ -56,25 +57,53 @@ export async function generateImage(
 export async function createVideo(
   payload: VideoGenerationRequest
 ): Promise<VideoTaskResponse> {
-  const res = await api.post(API_ENDPOINTS.VIDEO_GENERATIONS, payload, {
+  const res = await api.post(API_ENDPOINTS.VIDEOS, payload, {
     skipErrorHandler: true,
   } as Record<string, unknown>)
   return res.data
 }
 
 export async function getVideoTask(taskId: string): Promise<VideoTaskResponse> {
-  const res = await api.get(`${API_ENDPOINTS.VIDEO_GENERATIONS}/${taskId}`, {
+  const res = await api.get(`${API_ENDPOINTS.VIDEOS}/${taskId}`, {
     skipErrorHandler: true,
   } as Record<string, unknown>)
   return res.data
 }
 
+export async function getVideoContent(contentURL: string): Promise<Blob> {
+  const res = await api.get(contentURL, {
+    responseType: 'blob',
+    skipErrorHandler: true,
+  } as Record<string, unknown>)
+  return res.data as Blob
+}
+
+export async function uploadPlaygroundAsset(
+  file: File,
+  kind: 'audio' | 'image' | 'video'
+): Promise<string> {
+  const formData = new FormData()
+  formData.append('kind', kind)
+  formData.append('file', file)
+
+  const res = await api.post('/pg/assets', formData, {
+    skipErrorHandler: true,
+  } as Record<string, unknown>)
+  if (!res.data?.success || typeof res.data.data?.url !== 'string') {
+    throw new Error(res.data?.message || 'Upload failed')
+  }
+  return res.data.data.url
+}
+
 /**
  * Get user available models
  */
-export async function getUserModels(group: string): Promise<ModelOption[]> {
+export async function getUserModels(
+  group: string,
+  mode: PlaygroundMode
+): Promise<ModelOption[]> {
   const res = await api.get(API_ENDPOINTS.USER_MODELS, {
-    params: { group },
+    params: { group, mode },
   })
   const { data } = res
 

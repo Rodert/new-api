@@ -20,6 +20,7 @@ import (
 	"github.com/QuantumNous/new-api/relay/helper"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/gin-gonic/gin"
+	"github.com/tidwall/sjson"
 )
 
 type TaskSubmitResult struct {
@@ -424,15 +425,17 @@ func videoFetchByIDRespBodyBuilder(c *gin.Context) (respBody []byte, taskResp *d
 	return
 }
 
-// tryRealtimeFetch 尝试从上游实时拉取 Gemini/Vertex 任务状态。
-// 仅当渠道类型为 Gemini 或 Vertex 时触发；其他渠道或出错时返回 nil。
-// 当非 OpenAI Video API 时，还会构建自定义格式的响应体。
+// tryRealtimeFetch attempts to retrieve the latest task state from providers
+// that support direct polling. It returns nil when the provider is unsupported
+// or the upstream request fails.
 func tryRealtimeFetch(task *model.Task, isOpenAIVideoAPI bool) []byte {
 	channelModel, err := model.GetChannelById(task.ChannelId, true)
 	if err != nil {
 		return nil
 	}
-	if channelModel.Type != constant.ChannelTypeVertexAi && channelModel.Type != constant.ChannelTypeGemini {
+	if channelModel.Type != constant.ChannelTypeVertexAi &&
+		channelModel.Type != constant.ChannelTypeGemini &&
+		channelModel.Type != constant.ChannelTypeJimengZZVideo {
 		return nil
 	}
 
@@ -446,7 +449,11 @@ func tryRealtimeFetch(task *model.Task, isOpenAIVideoAPI bool) []byte {
 		return nil
 	}
 
-	resp, err := adaptor.FetchTask(baseURL, channelModel.Key, map[string]any{
+	key := channelModel.Key
+	if task.PrivateData.Key != "" {
+		key = task.PrivateData.Key
+	}
+	resp, err := adaptor.FetchTask(baseURL, key, map[string]any{
 		"task_id": task.GetUpstreamTaskID(),
 		"action":  task.Action,
 	}, proxy)
@@ -463,7 +470,6 @@ func tryRealtimeFetch(task *model.Task, isOpenAIVideoAPI bool) []byte {
 	if err != nil || ti == nil {
 		return nil
 	}
-
 	snap := task.Snapshot()
 
 	// 将上游最新状态更新到 task
@@ -477,13 +483,21 @@ func tryRealtimeFetch(task *model.Task, isOpenAIVideoAPI bool) []byte {
 		// data: URI — kept in Data, not ResultURL
 	} else if ti.Url != "" {
 		task.PrivateData.ResultURL = ti.Url
-	} else if task.Status == model.TaskStatusSuccess {
+	} else if task.Status == model.TaskStatusSuccess && channelModel.Type != constant.ChannelTypeJimengZZVideo {
 		// No URL from adaptor — construct proxy URL using public task ID
 		task.PrivateData.ResultURL = taskcommon.BuildProxyURL(task.TaskID)
 	}
 
 	if !snap.Equal(task.Snapshot()) {
 		_, _ = task.UpdateWithStatus(snap.Status)
+	}
+
+	if channelModel.Type == constant.ChannelTypeJimengZZVideo {
+		publicResponse, err := rewriteJimengZZVideoTaskResponse(body, task.TaskID)
+		if err != nil {
+			return nil
+		}
+		return publicResponse
 	}
 
 	// OpenAI Video API 由调用者的 ConvertToOpenAIVideo 分支处理
@@ -506,6 +520,14 @@ func tryRealtimeFetch(task *model.Task, isOpenAIVideoAPI bool) []byte {
 		Data: out,
 	})
 	return respBody
+}
+
+func rewriteJimengZZVideoTaskResponse(body []byte, publicTaskID string) ([]byte, error) {
+	publicResponse, err := sjson.SetBytes(body, "id", publicTaskID)
+	if err != nil {
+		return nil, err
+	}
+	return sjson.DeleteBytes(publicResponse, "task_id")
 }
 
 // detectVideoFormat 从 Gemini/Vertex 原始响应中探测视频格式

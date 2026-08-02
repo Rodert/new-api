@@ -46,11 +46,17 @@ import {
   getOptionLoadErrorMessage,
   shouldClearModelForGroup,
 } from '../lib'
-import type { GroupOption, ModelOption, PlaygroundConfig } from '../types'
+import type {
+  GroupOption,
+  ModelOption,
+  PlaygroundConfig,
+  PlaygroundMode,
+} from '../types'
 
 type UsePlaygroundOptionsParams = {
   currentGroup: string
   currentModel: string
+  currentMode: PlaygroundMode
   setGroups: (groups: GroupOption[]) => void
   setModels: (models: ModelOption[]) => void
   updateConfig: <K extends keyof PlaygroundConfig>(
@@ -62,6 +68,7 @@ type UsePlaygroundOptionsParams = {
 export function usePlaygroundOptions({
   currentGroup,
   currentModel,
+  currentMode,
   setGroups,
   setModels,
   updateConfig,
@@ -74,8 +81,8 @@ export function usePlaygroundOptions({
     isError: isModelsError,
     isLoading: isLoadingModels,
   } = useQuery({
-    queryKey: ['playground-models', currentGroup],
-    queryFn: () => getUserModels(currentGroup),
+    queryKey: ['playground-models', currentGroup, currentMode],
+    queryFn: () => getUserModels(currentGroup, currentMode),
     enabled: currentGroup !== '',
   })
 

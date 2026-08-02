@@ -60,20 +60,33 @@ func SetRelayRouter(router *gin.Engine) {
 		})
 	}
 
+	playgroundAssetRouter := router.Group("/pg/assets")
+	playgroundAssetRouter.Use(middleware.RouteTag("relay"))
+	playgroundAssetRouter.GET("/:asset_id", controller.PlaygroundAssetFetch)
+	playgroundAssetRouter.Use(middleware.SystemPerformanceCheck(), middleware.TokenOrUserAuth())
+	playgroundAssetRouter.POST("", middleware.UploadRateLimit(), controller.PlaygroundAssetUpload)
+
 	playgroundRouter := router.Group("/pg")
 	playgroundRouter.Use(middleware.RouteTag("relay"))
 	playgroundRouter.Use(middleware.SystemPerformanceCheck())
-	playgroundRouter.Use(middleware.UserAuth(), middleware.Distribute())
+	playgroundRouter.Use(middleware.UserAuth())
 	{
-		playgroundRouter.POST("/chat/completions", controller.Playground)
-		playgroundRouter.POST("/images/generations", controller.PlaygroundImage)
-		playgroundRouter.POST("/video/generations", func(c *gin.Context) {
-			c.Set("relay_mode", relayconstant.RelayModeVideoSubmit)
-			controller.PlaygroundTask(c)
-		})
-		playgroundRouter.GET("/video/generations/:task_id", func(c *gin.Context) {
+		// Task polling resolves the channel from the persisted task. It has no model
+		// in its URL or body, so it must not enter the submission distributor.
+		playgroundRouter.GET("/videos/:task_id", func(c *gin.Context) {
 			c.Set("relay_mode", relayconstant.RelayModeVideoFetchByID)
 			controller.PlaygroundTaskFetch(c)
+		})
+		playgroundRouter.GET("/videos/:task_id/content", controller.VideoProxy)
+		playgroundRouter.HEAD("/videos/:task_id/content", controller.VideoProxy)
+
+		playgroundSubmitRouter := playgroundRouter.Group("")
+		playgroundSubmitRouter.Use(middleware.Distribute())
+		playgroundSubmitRouter.POST("/chat/completions", controller.Playground)
+		playgroundSubmitRouter.POST("/images/generations", controller.PlaygroundImage)
+		playgroundSubmitRouter.POST("/videos", func(c *gin.Context) {
+			c.Set("relay_mode", relayconstant.RelayModeVideoSubmit)
+			controller.PlaygroundTask(c)
 		})
 	}
 	relayV1Router := router.Group("/v1")

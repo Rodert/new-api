@@ -1,0 +1,581 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="Silico Grove API 接入文档：文本、图片、视频、音频与临时素材上传。"
+    />
+    <title>Silico Grove API 接入文档</title>
+    <style>
+      :root {
+        --bg: #ffffff;
+        --surface: #f7f8fa;
+        --surface-strong: #eef1f5;
+        --line: #e2e6eb;
+        --text: #172033;
+        --muted: #647084;
+        --brand: #1769aa;
+        --brand-dark: #0e4e82;
+        --code: #111b2c;
+        --code-text: #e7edf7;
+        --notice-bg: #eef7ff;
+        --notice-line: #a5d3f3;
+        --warning-bg: #fff7e7;
+        --warning-line: #f4c76d;
+        --success: #147a57;
+      }
+
+      * { box-sizing: border-box; }
+
+      html { scroll-behavior: smooth; }
+
+      body {
+        margin: 0;
+        color: var(--text);
+        background: var(--bg);
+        font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+        line-height: 1.65;
+      }
+
+      a { color: inherit; text-decoration: none; }
+
+      .shell {
+        display: grid;
+        grid-template-columns: 272px minmax(0, 1fr);
+        min-height: 100vh;
+      }
+
+      .sidebar {
+        position: sticky;
+        top: 0;
+        height: 100vh;
+        padding: 24px 16px;
+        overflow-y: auto;
+        border-right: 1px solid var(--line);
+        background: #fbfcfd;
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 4px 8px 22px;
+      }
+
+      .brand-mark {
+        display: grid;
+        width: 28px;
+        height: 28px;
+        place-items: center;
+        border-radius: 7px;
+        color: #ffffff;
+        background: var(--brand);
+        font-size: 14px;
+        font-weight: 800;
+      }
+
+      .brand-name { font-size: 15px; font-weight: 750; }
+      .brand-subtitle { color: var(--muted); font-size: 12px; }
+
+      .nav-label {
+        margin: 18px 9px 7px;
+        color: #7b8594;
+        font-size: 11px;
+        font-weight: 750;
+        letter-spacing: 0.08em;
+      }
+
+      .nav-link {
+        display: block;
+        padding: 7px 9px;
+        border-radius: 5px;
+        color: #4d5b6f;
+        font-size: 14px;
+      }
+
+      .nav-link:hover, .nav-link:focus { color: var(--brand-dark); background: #edf5fb; outline: 0; }
+      .nav-link.active { color: var(--brand-dark); background: #e7f2fb; font-weight: 700; }
+
+      main { min-width: 0; }
+
+      .topbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        min-height: 65px;
+        padding: 0 48px;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .topbar small { color: var(--muted); }
+      .topbar a { color: var(--brand-dark); font-size: 14px; font-weight: 650; }
+
+      .content { width: min(100%, 920px); padding: 52px 48px 96px; }
+
+      .eyebrow {
+        margin: 0 0 10px;
+        color: var(--brand);
+        font-size: 13px;
+        font-weight: 750;
+      }
+
+      h1, h2, h3 { letter-spacing: 0; line-height: 1.25; }
+      h1 { margin: 0; font-size: 38px; }
+      h2 { margin: 64px 0 16px; padding-top: 4px; font-size: 27px; }
+      h3 { margin: 36px 0 12px; font-size: 19px; }
+      p { margin: 0 0 14px; }
+      ul { margin: 10px 0 16px; padding-left: 22px; }
+      li + li { margin-top: 5px; }
+
+      .lead { max-width: 760px; margin-top: 14px; color: #516074; font-size: 17px; }
+
+      .endpoint {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        margin-top: 20px;
+        padding: 10px 12px;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        background: var(--surface);
+        font-size: 14px;
+      }
+
+      .endpoint code, code {
+        padding: 0.12em 0.35em;
+        border-radius: 4px;
+        background: #eef1f5;
+        color: #29384e;
+        font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+        font-size: 0.88em;
+      }
+
+      .callout {
+        margin: 22px 0;
+        padding: 15px 17px;
+        border: 1px solid var(--notice-line);
+        border-radius: 6px;
+        background: var(--notice-bg);
+      }
+
+      .callout.warning { border-color: var(--warning-line); background: var(--warning-bg); }
+      .callout strong { display: block; margin-bottom: 4px; }
+
+      .steps {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 12px;
+        margin: 24px 0 6px;
+      }
+
+      .step {
+        min-height: 128px;
+        padding: 16px;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+      }
+
+      .step-number { color: var(--brand); font-size: 12px; font-weight: 800; }
+      .step h3 { margin: 7px 0 5px; font-size: 16px; }
+      .step p { margin: 0; color: var(--muted); font-size: 13px; }
+
+      .code-block {
+        position: relative;
+        margin: 16px 0 24px;
+        overflow: hidden;
+        border: 1px solid #25334a;
+        border-radius: 6px;
+        background: var(--code);
+      }
+
+      .code-label {
+        padding: 8px 14px;
+        border-bottom: 1px solid #26364f;
+        color: #afbdd0;
+        font-family: "SFMono-Regular", Consolas, monospace;
+        font-size: 12px;
+      }
+
+      .copy-button {
+        position: absolute;
+        top: 6px;
+        right: 8px;
+        min-width: 52px;
+        padding: 4px 8px;
+        border: 1px solid #536176;
+        border-radius: 4px;
+        color: #dce6f5;
+        background: transparent;
+        cursor: pointer;
+        font-size: 12px;
+      }
+
+      .copy-button:hover { border-color: #a6c7e8; background: #273a56; }
+
+      pre {
+        max-height: 460px;
+        margin: 0;
+        overflow: auto;
+        padding: 17px;
+        color: var(--code-text);
+        font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+        font-size: 13px;
+        line-height: 1.7;
+        tab-size: 2;
+      }
+
+      pre code { padding: 0; color: inherit; background: transparent; font-size: inherit; }
+
+      table { width: 100%; margin: 16px 0 26px; border-collapse: collapse; font-size: 14px; }
+      th, td { padding: 11px 12px; border: 1px solid var(--line); text-align: left; vertical-align: top; }
+      th { background: var(--surface); color: #46546a; font-weight: 700; }
+      td { color: #4d5b6f; }
+
+      .method { color: var(--success); font-family: "SFMono-Regular", Consolas, monospace; font-size: 13px; font-weight: 750; }
+      .footer-note { margin-top: 68px; color: var(--muted); font-size: 13px; }
+
+      @media (max-width: 820px) {
+        .shell { display: block; }
+        .sidebar { position: static; height: auto; padding: 16px; border-right: 0; border-bottom: 1px solid var(--line); }
+        .brand { padding-bottom: 10px; }
+        .sidebar nav { display: flex; gap: 4px; overflow-x: auto; }
+        .nav-label { display: none; }
+        .nav-link { flex: 0 0 auto; }
+        .topbar { padding: 0 20px; }
+        .content { padding: 36px 20px 72px; }
+        h1 { font-size: 31px; }
+        h2 { font-size: 24px; }
+        .steps { grid-template-columns: 1fr; }
+        pre { padding: 14px; font-size: 12px; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="shell">
+      <aside class="sidebar">
+        <a class="brand" href="#overview">
+          <span class="brand-mark">S</span>
+          <span>
+            <span class="brand-name">Silico Grove</span><br />
+            <span class="brand-subtitle">API 接入文档</span>
+          </span>
+        </a>
+        <nav aria-label="文档目录">
+          <p class="nav-label">开始使用</p>
+          <a class="nav-link active" href="#overview">概览</a>
+          <a class="nav-link" href="#quickstart">快速接入</a>
+          <a class="nav-link" href="#models">模型与权限</a>
+          <p class="nav-label">接口</p>
+          <a class="nav-link" href="#chat">文本聊天</a>
+          <a class="nav-link" href="#images">图片生成与编辑</a>
+          <a class="nav-link" href="#videos">视频生成</a>
+          <a class="nav-link" href="#assets">上传视频素材</a>
+          <a class="nav-link" href="#audio">音频</a>
+          <p class="nav-label">参考</p>
+          <a class="nav-link" href="#errors">常见错误</a>
+          <a class="nav-link" href="#relay">二次中转</a>
+        </nav>
+      </aside>
+
+      <main>
+        <header class="topbar">
+          <small>开发者文档</small>
+          <a href="https://ai.silicogrove.com/" target="_blank" rel="noreferrer">打开控制台</a>
+        </header>
+
+        <article class="content">
+          <section id="overview">
+            <p class="eyebrow">SILICO GROVE API</p>
+            <h1>给普通用户和二次中转用户的接入手册</h1>
+            <p class="lead">照着复制即可接入文本、图片、视频和音频能力。不同功能需要使用对应的 endpoint，请保留原始字段名。</p>
+            <p class="endpoint">Base URL <code>https://ai.silicogrove.com/v1</code></p>
+            <table>
+              <thead><tr><th>项目</th><th>值</th></tr></thead>
+              <tbody>
+                <tr><td>认证</td><td><code>Authorization: Bearer YOUR_API_KEY</code></td></tr>
+                <tr><td>JSON 请求</td><td><code>Content-Type: application/json</code></td></tr>
+                <tr><td>文件上传</td><td><code>multipart/form-data</code></td></tr>
+              </tbody>
+            </table>
+          </section>
+
+          <section id="quickstart">
+            <h2>快速接入</h2>
+            <div class="steps">
+              <div class="step"><span class="step-number">01</span><h3>创建 API Key</h3><p>在控制台创建并妥善保存自己的 Key。</p></div>
+              <div class="step"><span class="step-number">02</span><h3>查询可用模型</h3><p>使用同一个 Key 请求模型列表，确认权限。</p></div>
+              <div class="step"><span class="step-number">03</span><h3>调用对应接口</h3><p>视频走视频接口，图片走图片接口，不要混用。</p></div>
+            </div>
+            <div class="callout"><strong>Base URL 不要重复拼接。</strong>OpenAI SDK 的 <code>base_url</code> 填 <code>https://ai.silicogrove.com/v1</code>；自己拼完整路径时不要写成 <code>/v1/v1</code>。</div>
+
+            <h3>查询可用模型</h3>
+            <div class="code-block"><div class="code-label">Shell</div><button class="copy-button" type="button">复制</button><pre><code>curl -X GET "https://ai.silicogrove.com/v1/models" \
+  -H "Authorization: Bearer YOUR_API_KEY"</code></pre></div>
+
+            <h3>最小文本测试</h3>
+            <div class="code-block"><div class="code-label">Shell</div><button class="copy-button" type="button">复制</button><pre><code>curl -X POST "https://ai.silicogrove.com/v1/chat/completions" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gpt-5.4-mini",
+    "messages": [{"role": "user", "content": "你好，用一句话回复我"}]
+  }'</code></pre></div>
+
+            <h3>Python OpenAI SDK</h3>
+            <div class="code-block"><div class="code-label">Python</div><button class="copy-button" type="button">复制</button><pre><code>from openai import OpenAI
+
+client = OpenAI(
+    api_key="YOUR_API_KEY",
+    base_url="https://ai.silicogrove.com/v1",
+)
+
+response = client.chat.completions.create(
+    model="gpt-5.4-mini",
+    messages=[{"role": "user", "content": "你好，用一句话回复我"}],
+)
+print(response.choices[0].message.content)</code></pre></div>
+          </section>
+
+          <section id="models">
+            <h2>模型与权限</h2>
+            <p>可调用模型由账号、分组和 API Key 权限共同决定。始终以自己的 <code>/v1/models</code> 返回结果为准。</p>
+            <table>
+              <thead><tr><th>场景</th><th>常见模型示例</th><th>接口</th></tr></thead>
+              <tbody>
+                <tr><td>文本</td><td><code>gpt-5.4-mini</code>、Claude、Gemini 等</td><td><code>/v1/chat/completions</code></td></tr>
+                <tr><td>图片</td><td><code>gpt-image-2</code>、Gemini 图片模型</td><td><code>/v1/images/generations</code></td></tr>
+                <tr><td>视频</td><td><code>video-ds-2.0</code>、<code>as-sd2.0-fast</code></td><td><code>/v1/videos</code></td></tr>
+                <tr><td>音频</td><td>以模型列表返回为准</td><td><code>/v1/audio/*</code></td></tr>
+              </tbody>
+            </table>
+          </section>
+
+          <section id="chat">
+            <h2>文本聊天</h2>
+            <h3>Chat Completions</h3>
+            <div class="code-block"><div class="code-label">Shell</div><button class="copy-button" type="button">复制</button><pre><code>curl -X POST "https://ai.silicogrove.com/v1/chat/completions" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gpt-5.4-mini",
+    "messages": [
+      {"role": "system", "content": "你是一个简洁的助手"},
+      {"role": "user", "content": "写一句产品介绍"}
+    ],
+    "stream": false
+  }'</code></pre></div>
+
+            <h3>Responses API</h3>
+            <div class="code-block"><div class="code-label">Shell</div><button class="copy-button" type="button">复制</button><pre><code>curl -X POST "https://ai.silicogrove.com/v1/responses" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"model": "gpt-5.4-mini", "input": "用一句话介绍你自己"}'</code></pre></div>
+          </section>
+
+          <section id="images">
+            <h2>图片生成与编辑</h2>
+            <h3>图片生成</h3>
+            <div class="code-block"><div class="code-label">Shell</div><button class="copy-button" type="button">复制</button><pre><code>curl -X POST "https://ai.silicogrove.com/v1/images/generations" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gpt-image-2",
+    "prompt": "一张高级感产品海报，干净背景，真实摄影风格",
+    "size": "1024x1024",
+    "quality": "auto",
+    "n": 1,
+    "response_format": "url"
+  }'</code></pre></div>
+            <table>
+              <thead><tr><th>字段</th><th>说明</th></tr></thead>
+              <tbody>
+                <tr><td><code>model</code></td><td>必填，必须是 Key 可见的图片模型。</td></tr>
+                <tr><td><code>prompt</code></td><td>必填，图片描述。</td></tr>
+                <tr><td><code>size</code></td><td>可选，例如 <code>1024x1024</code> 或模型支持的比例。</td></tr>
+                <tr><td><code>quality</code></td><td>可选，常见值为 <code>auto</code>、<code>low</code>、<code>high</code>、<code>2K</code>、<code>4K</code>。</td></tr>
+              </tbody>
+            </table>
+
+            <h3>图片编辑，上传本地图片</h3>
+            <div class="code-block"><div class="code-label">Shell</div><button class="copy-button" type="button">复制</button><pre><code>curl -X POST "https://ai.silicogrove.com/v1/images/edits" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -F "model=gpt-image-2" \
+  -F "prompt=把图片里的背景换成夜晚城市灯光" \
+  -F "image=@/path/to/input.png" \
+  -F "size=1024x1024"</code></pre></div>
+            <p>使用 <code>-F</code> 时不要手写 <code>Content-Type: application/json</code>。图片字段名是 <code>image</code>，遮罩字段名是 <code>mask</code>。</p>
+          </section>
+
+          <section id="videos">
+            <h2>视频生成</h2>
+            <p>视频模型必须使用 <code>POST /v1/videos</code>，不能作为聊天模型发送到 <code>/v1/chat/completions</code>。提交后返回任务 ID，需要轮询查询。</p>
+            <h3>最小文生视频示例</h3>
+            <div class="code-block"><div class="code-label">Shell</div><button class="copy-button" type="button">复制</button><pre><code>curl -X POST "https://ai.silicogrove.com/v1/videos" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "video-ds-2.0-fast",
+    "prompt": "A cinematic 9:16 short video, neon city rooftop at night, realistic lighting, no watermark.",
+    "seconds": "15",
+    "aspect_ratio": "9:16"
+  }'</code></pre></div>
+
+            <h3>完整多媒体参考示例</h3>
+            <div class="callout"><strong>参考素材必须是公网可访问 URL。</strong>可使用自己的对象存储 URL，或先上传到临时素材接口。不要在 JSON 中填写本地文件路径。</div>
+            <div class="code-block"><div class="code-label">Shell</div><button class="copy-button" type="button">复制</button><pre><code>curl -X POST "https://ai.silicogrove.com/v1/videos" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "video-ds-2.0",
+    "prompt": "参考图片的人物形象，参考视频的动作节奏，生成一段自然流畅的 9:16 视频",
+    "seconds": "15",
+    "aspect_ratio": "9:16",
+    "images": ["https://example.com/ref-1.jpg"],
+    "videos": ["https://example.com/motion.mp4"],
+    "audios": ["https://example.com/music.mp3"]
+  }'</code></pre></div>
+            <table>
+              <thead><tr><th>字段</th><th>限制</th><th>说明</th></tr></thead>
+              <tbody>
+                <tr><td><code>model</code></td><td>必填</td><td>必须是 Key 可见的视频模型。</td></tr>
+                <tr><td><code>prompt</code></td><td>必填</td><td>建议明确主体、动作、镜头、风格与比例。</td></tr>
+                <tr><td><code>seconds</code></td><td>建议填</td><td>字符串，例如 <code>"5"</code>、<code>"10"</code>、<code>"15"</code>。</td></tr>
+                <tr><td><code>aspect_ratio</code></td><td>建议填</td><td><code>16:9</code>、<code>9:16</code> 或 <code>1:1</code>。</td></tr>
+                <tr><td><code>images</code></td><td>最多 4 张</td><td>jpg、png、webp 的 URL 数组。</td></tr>
+                <tr><td><code>videos</code></td><td>最多 3 个</td><td>mp4、mov、webm 的 URL 数组。</td></tr>
+                <tr><td><code>audios</code></td><td>最多 1 个</td><td>mp3、m4a、wav、aac、ogg 的 URL 数组。</td></tr>
+              </tbody>
+            </table>
+
+            <h3>查询任务与下载视频</h3>
+            <div class="code-block"><div class="code-label">Shell</div><button class="copy-button" type="button">复制</button><pre><code>curl -X GET "https://ai.silicogrove.com/v1/videos/TASK_ID" \
+  -H "Authorization: Bearer YOUR_API_KEY"
+
+curl -L -X GET "https://ai.silicogrove.com/v1/videos/TASK_ID/content" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  --output result.mp4</code></pre></div>
+          </section>
+
+          <section id="assets">
+            <h2>上传视频素材</h2>
+            <p>本地图片、视频和音频可先上传到临时素材接口。上传成功后的 <code>data.url</code> 可直接放入视频请求中的 <code>images</code>、<code>videos</code> 或 <code>audios</code> 数组。</p>
+            <div class="callout warning"><strong>临时素材会在 24 小时后自动删除。</strong>需要长期保留时，请使用自己的对象存储或 CDN URL。</div>
+            <div class="code-block"><div class="code-label">Shell</div><button class="copy-button" type="button">复制</button><pre><code># 上传图片
+curl -X POST "https://ai.silicogrove.com/pg/assets" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -F "kind=image" \
+  -F "file=@/path/to/ref.jpg"
+
+# 上传视频
+curl -X POST "https://ai.silicogrove.com/pg/assets" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -F "kind=video" \
+  -F "file=@/path/to/ref.mp4"
+
+# 上传音频
+curl -X POST "https://ai.silicogrove.com/pg/assets" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -F "kind=audio" \
+  -F "file=@/path/to/ref.mp3"</code></pre></div>
+            <h3>上传返回示例</h3>
+            <div class="code-block"><div class="code-label">JSON</div><button class="copy-button" type="button">复制</button><pre><code>{
+  "success": true,
+  "data": {
+    "kind": "image",
+    "url": "https://ai.silicogrove.com/pg/assets/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
+    "filename": "ref.jpg",
+    "content_type": "image/jpeg",
+    "size": 123456
+  }
+}</code></pre></div>
+            <table>
+              <thead><tr><th><code>kind</code></th><th>文件类型</th><th>单文件大小</th></tr></thead>
+              <tbody>
+                <tr><td><code>image</code></td><td>jpg、png、webp</td><td>最多 20 MiB</td></tr>
+                <tr><td><code>video</code></td><td>mp4、mov、webm</td><td>最多 100 MiB</td></tr>
+                <tr><td><code>audio</code></td><td>mp3、m4a、wav、aac、ogg、webm</td><td>最多 20 MiB</td></tr>
+              </tbody>
+            </table>
+          </section>
+
+          <section id="audio">
+            <h2>音频</h2>
+            <h3>语音合成</h3>
+            <div class="code-block"><div class="code-label">Shell</div><button class="copy-button" type="button">复制</button><pre><code>curl -X POST "https://ai.silicogrove.com/v1/audio/speech" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "YOUR_TTS_MODEL",
+    "input": "欢迎使用 Silico Grove API。",
+    "voice": "alloy",
+    "response_format": "mp3"
+  }' \
+  --output speech.mp3</code></pre></div>
+            <h3>音频转写与翻译</h3>
+            <div class="code-block"><div class="code-label">Shell</div><button class="copy-button" type="button">复制</button><pre><code>curl -X POST "https://ai.silicogrove.com/v1/audio/transcriptions" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -F "model=YOUR_STT_MODEL" \
+  -F "file=@/path/to/audio.mp3" \
+  -F "response_format=json"
+
+curl -X POST "https://ai.silicogrove.com/v1/audio/translations" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -F "model=YOUR_STT_MODEL" \
+  -F "file=@/path/to/audio.mp3" \
+  -F "response_format=json"</code></pre></div>
+            <p>转写和翻译必须使用 multipart，文件字段名是 <code>file</code>。</p>
+          </section>
+
+          <section id="errors">
+            <h2>常见错误</h2>
+            <table>
+              <thead><tr><th>现象</th><th>常见原因</th><th>处理方式</th></tr></thead>
+              <tbody>
+                <tr><td>模型不可用</td><td>模型和分组不匹配，或 Key 没有权限。</td><td>用同一个 Key 请求 <code>/v1/models</code> 确认模型名。</td></tr>
+                <tr><td><code>model is required</code></td><td>字段名被二次中转改写。</td><td>保留 <code>model</code>，不要改成 <code>model_name</code>。</td></tr>
+                <tr><td>视频失败或走聊天模型</td><td>视频请求发到了聊天接口。</td><td>视频必须调用 <code>POST /v1/videos</code>。</td></tr>
+                <tr><td>参考素材未生效</td><td>传了本地路径，或字段不是数组。</td><td>传公网 URL，分别填入 <code>images</code>、<code>videos</code>、<code>audios</code>。</td></tr>
+                <tr><td>seconds 类型错误</td><td>把时长传成数字。</td><td>使用字符串，例如 <code>"seconds": "15"</code>。</td></tr>
+                <tr><td>上传失败</td><td>手写了错误的 Content-Type，或字段名错误。</td><td>使用 <code>-F</code>；文件字段名为 <code>file</code>。</td></tr>
+              </tbody>
+            </table>
+          </section>
+
+          <section id="relay">
+            <h2>二次中转注意事项</h2>
+            <ul>
+              <li>上游地址填写 <code>https://ai.silicogrove.com</code> 或 <code>https://ai.silicogrove.com/v1</code>，取决于你的中转系统是否自动补全 <code>/v1</code>。</li>
+              <li>使用 Silico Grove 的 API Key 同步 <code>/v1/models</code>，不要手填不存在的模型。</li>
+              <li>视频模型 endpoint 必须为 <code>/v1/videos</code>，不要放入聊天模型池。</li>
+              <li>转发视频请求时保留 JSON 原字段，尤其是 <code>images</code>、<code>videos</code>、<code>audios</code> 数组。</li>
+              <li>图片编辑与音频转写是 multipart 请求，转发时不要丢失文件字段。</li>
+            </ul>
+          </section>
+
+          <p class="footer-note">排查问题时请提供请求时间、模型名、接口路径、分组、request id 和错误内容。请勿公开完整 API Key、Authorization 头或敏感提示词。</p>
+        </article>
+      </main>
+    </div>
+    <script>
+      document.querySelectorAll('.copy-button').forEach((button) => {
+        button.addEventListener('click', async () => {
+          const code = button.parentElement.querySelector('pre').innerText
+          await navigator.clipboard.writeText(code)
+          button.textContent = '已复制'
+          window.setTimeout(() => { button.textContent = '复制' }, 1600)
+        })
+      })
+
+      const links = [...document.querySelectorAll('.nav-link')]
+      const sections = links.map((link) => document.querySelector(link.getAttribute('href')))
+      const observer = new IntersectionObserver((entries) => {
+        const visible = entries.find((entry) => entry.isIntersecting)
+        if (!visible) return
+        links.forEach((link) => link.classList.toggle('active', link.getAttribute('href') === `#${visible.target.id}`))
+      }, { rootMargin: '-20% 0px -70% 0px' })
+      sections.forEach((section) => section && observer.observe(section))
+    </script>
+  </body>
+</html>

@@ -42,7 +42,8 @@ import {
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 
-import { generateImage } from '../../api'
+import { generateImage, uploadPlaygroundAsset } from '../../api'
+import { loadImageWorkspaceResult, saveImageWorkspaceResult } from '../../lib'
 import type {
   GroupOption,
   ImageGenerationResponse,
@@ -97,7 +98,9 @@ export function ImageWorkspace({
   const [quality, setQuality] = useState('auto')
   const [quantity, setQuantity] = useState(1)
   const [references, setReferences] = useState<string[]>([])
-  const [result, setResult] = useState<ImageGenerationResponse | null>(null)
+  const [result, setResult] = useState<ImageGenerationResponse | null>(
+    loadImageWorkspaceResult
+  )
   const [isGenerating, setIsGenerating] = useState(false)
 
   const handleFiles = async (files: FileList | null) => {
@@ -105,23 +108,7 @@ export function ImageWorkspace({
 
     try {
       const nextReferences = await Promise.all(
-        [...files].map(
-          (file) =>
-            new Promise<string>((resolve, reject) => {
-              const reader = new FileReader()
-              reader.addEventListener(
-                'load',
-                () => resolve(String(reader.result)),
-                {
-                  once: true,
-                }
-              )
-              reader.addEventListener('error', () => reject(reader.error), {
-                once: true,
-              })
-              reader.readAsDataURL(file)
-            })
-        )
+        [...files].map((file) => uploadPlaygroundAsset(file, 'image'))
       )
       setReferences((current) =>
         [...current, ...nextReferences].slice(0, maxReferenceImages)
@@ -146,6 +133,16 @@ export function ImageWorkspace({
         ...(references.length > 0 ? { images: references } : {}),
       })
       setResult(response)
+      saveImageWorkspaceResult(response, {
+        aspectRatio:
+          imageSizeOptions.find((option) => option.value === size)?.label ??
+          '1:1',
+        group: config.group,
+        model: config.model,
+        n: quantity,
+        prompt: prompt.trim(),
+        qualityPreset: quality,
+      })
     } catch (error) {
       toast.error(error instanceof Error ? error.message : t('Request failed'))
     } finally {
@@ -157,6 +154,7 @@ export function ImageWorkspace({
     setPrompt('')
     setReferences([])
     setResult(null)
+    saveImageWorkspaceResult(null)
   }
 
   const images = result?.data ?? []

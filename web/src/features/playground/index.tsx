@@ -16,6 +16,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import { useCallback, useState } from 'react'
+
 import { MediaWorkspace } from './components/media/media-workspace'
 import {
   useChatHandler,
@@ -23,8 +25,11 @@ import {
   usePlaygroundOptions,
   usePlaygroundState,
 } from './hooks'
+import { loadPlaygroundMode, savePlaygroundMode } from './lib'
+import type { PlaygroundMode } from './types'
 
 export function Playground() {
+  const [mode, setMode] = useState<PlaygroundMode>(loadPlaygroundMode)
   const {
     config,
     parameterEnabled,
@@ -65,9 +70,15 @@ export function Playground() {
     clearMessages()
   }
 
+  const handleModeChange = useCallback((nextMode: PlaygroundMode) => {
+    setMode(nextMode)
+    savePlaygroundMode(nextMode)
+  }, [])
+
   const { isLoadingModels } = usePlaygroundOptions({
     currentGroup: config.group,
     currentModel: config.model,
+    currentMode: mode,
     setGroups,
     setModels,
     updateConfig,
@@ -76,6 +87,7 @@ export function Playground() {
   return (
     <div className='relative flex size-full min-h-0 flex-col overflow-hidden'>
       <MediaWorkspace
+        mode={mode}
         config={config}
         editingMessageKey={editingMessageKey}
         groups={groups}
@@ -87,6 +99,7 @@ export function Playground() {
         parameterEnabled={parameterEnabled}
         onClearMessages={handleClearMessages}
         onConfigChange={updateConfig}
+        onModeChange={handleModeChange}
         onDeleteMessage={handleDeleteMessage}
         onEditMessage={handleEditMessage}
         onEditOpenChange={handleEditOpenChange}

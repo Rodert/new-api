@@ -363,6 +363,7 @@ func InitResources() error {
 	}
 
 	service.StartAuthArtifactCleanup()
+	controller.StartPlaygroundAssetCleanup()
 
 	return nil
 }

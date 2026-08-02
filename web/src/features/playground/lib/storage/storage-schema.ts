@@ -89,3 +89,105 @@ const messageSchema = z.object({
 })
 
 export const messagesSchema = z.array(messageSchema)
+
+const imageResultSchema = z.object({
+  url: z.string().optional(),
+  b64_json: z.string().optional(),
+  revised_prompt: z.string().optional(),
+})
+
+const imageWorkspaceConfigSchema = z.object({
+  model: z.string(),
+  group: z.string(),
+  aspectRatio: z.string(),
+  qualityPreset: z.string(),
+  n: z.number(),
+  response_format: z.literal('url'),
+})
+
+const imageWorkspaceItemSchema = z.object({
+  id: z.string(),
+  prompt: z.string(),
+  model: z.string(),
+  group: z.string(),
+  aspectRatio: z.string(),
+  qualityPreset: z.string(),
+  n: z.number(),
+  createdAt: z.number(),
+  status: z.enum(['loading', 'completed', 'error']),
+  error: z.string().optional(),
+  data: z.array(imageResultSchema),
+})
+
+const videoTaskResponseSchema = z
+  .object({
+    id: z.string().optional(),
+    task_id: z.string().optional(),
+    object: z.string().optional(),
+    model: z.string().optional(),
+    status: z.string().optional(),
+    progress: z.number().optional(),
+    created_at: z.number().optional(),
+    completed_at: z.number().optional(),
+    failed_at: z.number().optional(),
+    processing_time: z.number().optional(),
+    seconds: z.string().optional(),
+    aspectRatio: z.string().optional(),
+    video_url: z.string().optional(),
+    result: z
+      .object({
+        duration: z.number().optional(),
+        expires_at: z.number().optional(),
+        format: z.string().optional(),
+        resultUrls: z.array(z.string()).optional(),
+        thumbnail_url: z.string().nullable().optional(),
+        video_url: z.string().optional(),
+      })
+      .optional(),
+    error: z
+      .object({
+        code: z.string().optional(),
+        message: z.string().optional(),
+      })
+      .optional(),
+  })
+  .passthrough()
+
+const videoWorkspaceConfigSchema = z.object({
+  model: z.string(),
+  group: z.string(),
+  aspectRatio: z.string(),
+  seconds: z.string(),
+  qualityPreset: z.string(),
+  n: z.literal(1),
+})
+
+const videoWorkspaceTaskSchema = videoTaskResponseSchema.extend({
+  id: z.string(),
+  taskId: z.string(),
+  model: z.string(),
+  group: z.string(),
+  prompt: z.string(),
+  aspectRatio: z.string(),
+  seconds: z.string(),
+  qualityPreset: z.string(),
+  createdAt: z.number(),
+})
+
+export const workspaceSchema = z.object({
+  version: z.literal(1),
+  mode: z.enum(['chat', 'image', 'video']),
+  chat: z.object({
+    config: playgroundConfigSchema,
+    parameterEnabled: parameterEnabledSchema,
+    messages: messagesSchema,
+  }),
+  image: z.object({
+    config: imageWorkspaceConfigSchema,
+    items: z.array(imageWorkspaceItemSchema).max(24),
+  }),
+  video: z.object({
+    config: videoWorkspaceConfigSchema,
+    tasks: z.array(videoWorkspaceTaskSchema).max(24),
+  }),
+})

@@ -23,6 +23,8 @@ export type MessageStatus = 'loading' | 'streaming' | 'complete' | 'error'
 
 export type PlaygroundMessageLayoutMode = 'alternating' | 'left'
 
+export type PlaygroundMode = 'chat' | 'image' | 'video'
+
 export interface MessageVersion {
   id: string
   content: string
@@ -137,7 +139,12 @@ export interface VideoGenerationRequest {
   model: string
   group?: string
   prompt: string
+  seconds?: string
+  aspect_ratio?: string
   image?: string
+  images?: string[]
+  videos?: string[]
+  audios?: string[]
   duration: number
   width: number
   height: number
@@ -146,11 +153,29 @@ export interface VideoGenerationRequest {
 }
 
 export interface VideoTaskResponse {
-  task_id?: string
   id?: string
+  task_id?: string
+  object?: string
+  model?: string
   status?: string
-  url?: string
+  progress?: number
+  created_at?: number
+  completed_at?: number
+  failed_at?: number
+  processing_time?: number
+  seconds?: string
+  aspectRatio?: string
+  video_url?: string
+  result?: {
+    duration?: number
+    expires_at?: number
+    format?: string
+    resultUrls?: string[]
+    thumbnail_url?: string | null
+    video_url?: string
+  }
   error?: {
+    code?: string
     message?: string
   }
 }

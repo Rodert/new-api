@@ -21,7 +21,6 @@ import {
   FileVideoIcon,
   FilmIcon,
   ImagePlusIcon,
-  InfoIcon,
   type LucideIcon,
   LoaderCircleIcon,
   SparklesIcon,
@@ -53,7 +52,14 @@ import {
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 
-import { createVideo, getVideoTask } from '../../api'
+import {
+  createVideo,
+  getVideoContent,
+  getVideoTask,
+  uploadPlaygroundAsset,
+} from '../../api'
+import { loadVideoWorkspaceTask, saveVideoWorkspaceTask } from '../../lib'
+import { getVideoURL } from '../../lib/video-task'
 import type {
   GroupOption,
   ModelOption,
@@ -75,6 +81,15 @@ type VideoWorkspaceProps = {
 type LocalMedia = {
   name: string
   url: string
+}
+
+type VideoWorkspaceMetadata = {
+  aspectRatio: string
+  group: string
+  model: string
+  prompt: string
+  qualityPreset: string
+  seconds: string
 }
 
 const completedStatuses = new Set(['succeeded', 'success', 'completed'])
@@ -123,13 +138,23 @@ export function VideoWorkspace({
   const [duration, setDuration] = useState(15)
   const [quality, setQuality] = useState('hd')
   const [quantity, setQuantity] = useState(1)
-  const [task, setTask] = useState<VideoTaskResponse | null>(null)
+  const [task, setTask] = useState<VideoTaskResponse | null>(
+    loadVideoWorkspaceTask
+  )
+  const [videoURL, setVideoURL] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const taskMetadataRef = useRef<VideoWorkspaceMetadata | null>(null)
 
   const taskId = task?.task_id || task?.id
   const status = task?.status?.toLowerCase()
   const isCompleted = Boolean(status && completedStatuses.has(status))
   const isFailed = Boolean(status && failedStatuses.has(status))
+
+  useEffect(() => {
+    if (task) {
+      saveVideoWorkspaceTask(task, taskMetadataRef.current ?? undefined)
+    }
+  }, [task])
 
   useEffect(() => {
     if (!taskId || isCompleted || isFailed) return
@@ -147,8 +172,43 @@ export function VideoWorkspace({
     return () => window.clearInterval(timer)
   }, [isCompleted, isFailed, t, taskId])
 
+  const videoContentURL = getVideoURL(task)
+
+  useEffect(() => {
+    if (!videoContentURL) {
+      setVideoURL(null)
+      return
+    }
+
+    let objectURL: string | null = null
+    let cancelled = false
+
+    void getVideoContent(videoContentURL)
+      .then((videoContent) => {
+        if (cancelled) return
+
+        objectURL = URL.createObjectURL(videoContent)
+        setVideoURL(objectURL)
+      })
+      .catch((error) => {
+        if (cancelled) return
+
+        toast.error(
+          error instanceof Error ? error.message : t('Request failed')
+        )
+      })
+
+    return () => {
+      cancelled = true
+      if (objectURL) {
+        URL.revokeObjectURL(objectURL)
+      }
+    }
+  }, [t, videoContentURL])
+
   const handleFiles = async (
     files: FileList | null,
+    kind: 'audio' | 'image' | 'video',
     maximum: number,
     setMedia: Dispatch<SetStateAction<LocalMedia[]>>
   ) => {
@@ -156,21 +216,10 @@ export function VideoWorkspace({
 
     try {
       const media = await Promise.all(
-        [...files].map(
-          (file) =>
-            new Promise<LocalMedia>((resolve, reject) => {
-              const reader = new FileReader()
-              reader.addEventListener(
-                'load',
-                () => resolve({ name: file.name, url: String(reader.result) }),
-                { once: true }
-              )
-              reader.addEventListener('error', () => reject(reader.error), {
-                once: true,
-              })
-              reader.readAsDataURL(file)
-            })
-        )
+        [...files].map(async (file) => ({
+          name: file.name,
+          url: await uploadPlaygroundAsset(file, kind),
+        }))
       )
       setMedia((current) => [...current, ...media].slice(0, maximum))
     } catch {
@@ -188,18 +237,36 @@ export function VideoWorkspace({
       dimensions = [1024, 1024]
     }
     setIsSubmitting(true)
+    taskMetadataRef.current = {
+      aspectRatio: ratio,
+      group: config.group,
+      model: config.model,
+      prompt: prompt.trim(),
+      qualityPreset: quality,
+      seconds: String(duration),
+    }
     setTask(null)
     try {
       const response = await createVideo({
         model: config.model,
         group: config.group,
         prompt: prompt.trim(),
+        seconds: String(duration),
+        aspect_ratio: ratio,
         duration,
         width: dimensions[0],
         height: dimensions[1],
         n: quantity,
         quality,
-        ...(referenceImages[0] ? { image: referenceImages[0].url } : {}),
+        ...(referenceImages.length > 0
+          ? { images: referenceImages.map((media) => media.url) }
+          : {}),
+        ...(referenceVideos.length > 0
+          ? { videos: referenceVideos.map((media) => media.url) }
+          : {}),
+        ...(referenceAudio.length > 0
+          ? { audios: referenceAudio.map((media) => media.url) }
+          : {}),
       })
       setTask(response)
     } catch (error) {
@@ -215,10 +282,10 @@ export function VideoWorkspace({
     setReferenceVideos([])
     setReferenceAudio([])
     setTask(null)
+    taskMetadataRef.current = null
+    saveVideoWorkspaceTask(null)
   }
 
-  const videoURL =
-    task?.url || (isCompleted && taskId ? `/v1/videos/${taskId}/content` : null)
   const hasMedia =
     referenceImages.length > 0 ||
     referenceVideos.length > 0 ||
@@ -236,6 +303,7 @@ export function VideoWorkspace({
     icon: LucideIcon,
     inputRef: RefObject<HTMLInputElement | null>,
     accept: string,
+    kind: 'audio' | 'image' | 'video',
     media: LocalMedia[],
     maximum: number,
     setMedia: Dispatch<SetStateAction<LocalMedia[]>>,
@@ -256,7 +324,7 @@ export function VideoWorkspace({
             accept={accept}
             className='sr-only'
             onChange={(event) => {
-              void handleFiles(event.target.files, maximum, setMedia)
+              void handleFiles(event.target.files, kind, maximum, setMedia)
               event.currentTarget.value = ''
             }}
             ref={inputRef}
@@ -480,6 +548,7 @@ export function VideoWorkspace({
               ImagePlusIcon,
               imageInputRef,
               'image/png,image/jpeg,image/webp',
+              'image',
               referenceImages,
               maxReferenceImages,
               setReferenceImages,
@@ -491,6 +560,7 @@ export function VideoWorkspace({
               FileVideoIcon,
               videoInputRef,
               'video/mp4,video/quicktime,video/webm',
+              'video',
               referenceVideos,
               maxReferenceVideos,
               setReferenceVideos
@@ -501,6 +571,7 @@ export function VideoWorkspace({
               AudioLinesIcon,
               audioInputRef,
               'audio/mpeg,audio/mp4,audio/wav,audio/aac,audio/ogg',
+              'audio',
               referenceAudio,
               maxReferenceAudio,
               setReferenceAudio
@@ -514,16 +585,6 @@ export function VideoWorkspace({
               </p>
             )}
 
-            {(referenceVideos.length > 0 || referenceAudio.length > 0) && (
-              <div className='flex gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs'>
-                <InfoIcon className='mt-0.5 size-4 shrink-0' />
-                <p>
-                  {t(
-                    'Video and audio references are kept in this page only and will be sent after backend support is added.'
-                  )}
-                </p>
-              </div>
-            )}
             <Button
               className='w-full'
               disabled={isSubmitting || !prompt.trim() || !config.model}

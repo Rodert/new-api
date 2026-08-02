@@ -95,6 +95,14 @@ func TestNewAPIChannelRegistration(t *testing.T) {
 	assert.Empty(t, constant.ChannelBaseURLs[constant.ChannelTypeNewAPI])
 }
 
+func TestJimengZZVideoChannelRegistration(t *testing.T) {
+	assert.Equal(t, 1000, constant.ChannelTypeJimengZZVideo)
+	assert.Equal(t, 60, constant.ChannelTypeDummy)
+	assert.Equal(t, "JimengZZVideo", constant.GetChannelTypeName(constant.ChannelTypeJimengZZVideo))
+	require.Greater(t, len(constant.ChannelBaseURLs), constant.ChannelTypeJimengZZVideo)
+	assert.Empty(t, constant.ChannelBaseURLs[constant.ChannelTypeJimengZZVideo])
+}
+
 func TestResponsesCompactAPITypeSupport(t *testing.T) {
 	tests := []struct {
 		name    string
