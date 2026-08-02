@@ -24,7 +24,6 @@ import {
   type LucideIcon,
   LoaderCircleIcon,
   SparklesIcon,
-  Trash2Icon,
   UploadIcon,
   XIcon,
 } from 'lucide-react'
@@ -52,20 +51,19 @@ import {
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 
+import { createVideo, getVideoTask, uploadPlaygroundAsset } from '../../api'
 import {
-  createVideo,
-  getVideoContent,
-  getVideoTask,
-  uploadPlaygroundAsset,
-} from '../../api'
-import { loadVideoWorkspaceTask, saveVideoWorkspaceTask } from '../../lib'
-import { getVideoURL } from '../../lib/video-task'
+  clearVideoWorkspaceTasks,
+  deleteVideoWorkspaceTask,
+  loadVideoWorkspaceTasks,
+  saveVideoWorkspaceTask,
+} from '../../lib'
 import type {
-  GroupOption,
-  ModelOption,
-  PlaygroundConfig,
-  VideoTaskResponse,
-} from '../../types'
+  VideoWorkspaceMetadata,
+  VideoWorkspaceTask,
+} from '../../lib/storage/storage'
+import type { GroupOption, ModelOption, PlaygroundConfig } from '../../types'
+import { VideoGenerationHistory } from './media-generation-history'
 
 type VideoWorkspaceProps = {
   config: PlaygroundConfig
@@ -81,15 +79,6 @@ type VideoWorkspaceProps = {
 type LocalMedia = {
   name: string
   url: string
-}
-
-type VideoWorkspaceMetadata = {
-  aspectRatio: string
-  group: string
-  model: string
-  prompt: string
-  qualityPreset: string
-  seconds: string
 }
 
 const completedStatuses = new Set(['succeeded', 'success', 'completed'])
@@ -119,6 +108,19 @@ const videoQuantityOptions = Array.from(
   value: String(value),
 }))
 
+function getVideoDimensions(ratio: string): [number, number] {
+  if (ratio === '9:16') return [720, 1280]
+  if (ratio === '1:1') return [1024, 1024]
+  return [1280, 720]
+}
+
+function toLocalMedia(urls: string[] | undefined): LocalMedia[] {
+  return (urls ?? []).map((url) => ({
+    name: url.split('/').pop() || url,
+    url,
+  }))
+}
+
 export function VideoWorkspace({
   config,
   groups,
@@ -138,30 +140,32 @@ export function VideoWorkspace({
   const [duration, setDuration] = useState(15)
   const [quality, setQuality] = useState('hd')
   const [quantity, setQuantity] = useState(1)
-  const [task, setTask] = useState<VideoTaskResponse | null>(
-    loadVideoWorkspaceTask
+  const [tasks, setTasks] = useState<VideoWorkspaceTask[]>(
+    loadVideoWorkspaceTasks
   )
-  const [videoURL, setVideoURL] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const taskMetadataRef = useRef<VideoWorkspaceMetadata | null>(null)
-
-  const taskId = task?.task_id || task?.id
-  const status = task?.status?.toLowerCase()
-  const isCompleted = Boolean(status && completedStatuses.has(status))
-  const isFailed = Boolean(status && failedStatuses.has(status))
 
   useEffect(() => {
-    if (task) {
-      saveVideoWorkspaceTask(task, taskMetadataRef.current ?? undefined)
-    }
-  }, [task])
+    const pendingTaskIDs = tasks
+      .filter((task) => {
+        const status = task.status?.toLowerCase()
+        return (
+          !status ||
+          (!completedStatuses.has(status) && !failedStatuses.has(status))
+        )
+      })
+      .map((task) => task.taskId)
+    if (!pendingTaskIDs.length) return
 
-  useEffect(() => {
-    if (!taskId || isCompleted || isFailed) return
+    let cancelled = false
 
     const timer = window.setInterval(() => {
-      void getVideoTask(taskId)
-        .then(setTask)
+      void Promise.all(pendingTaskIDs.map((taskID) => getVideoTask(taskID)))
+        .then((responses) => {
+          if (cancelled) return
+          responses.forEach((response) => saveVideoWorkspaceTask(response))
+          setTasks(loadVideoWorkspaceTasks())
+        })
         .catch((error) => {
           toast.error(
             error instanceof Error ? error.message : t('Request failed')
@@ -169,42 +173,11 @@ export function VideoWorkspace({
         })
     }, 3000)
 
-    return () => window.clearInterval(timer)
-  }, [isCompleted, isFailed, t, taskId])
-
-  const videoContentURL = getVideoURL(task)
-
-  useEffect(() => {
-    if (!videoContentURL) {
-      setVideoURL(null)
-      return
-    }
-
-    let objectURL: string | null = null
-    let cancelled = false
-
-    void getVideoContent(videoContentURL)
-      .then((videoContent) => {
-        if (cancelled) return
-
-        objectURL = URL.createObjectURL(videoContent)
-        setVideoURL(objectURL)
-      })
-      .catch((error) => {
-        if (cancelled) return
-
-        toast.error(
-          error instanceof Error ? error.message : t('Request failed')
-        )
-      })
-
     return () => {
       cancelled = true
-      if (objectURL) {
-        URL.revokeObjectURL(objectURL)
-      }
+      window.clearInterval(timer)
     }
-  }, [t, videoContentURL])
+  }, [t, tasks])
 
   const handleFiles = async (
     files: FileList | null,
@@ -227,48 +200,33 @@ export function VideoWorkspace({
     }
   }
 
-  const handleGenerate = async () => {
-    if (!prompt.trim() || !config.model) return
-
-    let dimensions = [1280, 720]
-    if (ratio === '9:16') {
-      dimensions = [720, 1280]
-    } else if (ratio === '1:1') {
-      dimensions = [1024, 1024]
-    }
+  const createVideoTask = async (metadata: VideoWorkspaceMetadata) => {
+    const [width, height] = getVideoDimensions(metadata.aspectRatio)
     setIsSubmitting(true)
-    taskMetadataRef.current = {
-      aspectRatio: ratio,
-      group: config.group,
-      model: config.model,
-      prompt: prompt.trim(),
-      qualityPreset: quality,
-      seconds: String(duration),
-    }
-    setTask(null)
     try {
       const response = await createVideo({
-        model: config.model,
-        group: config.group,
-        prompt: prompt.trim(),
-        seconds: String(duration),
-        aspect_ratio: ratio,
-        duration,
-        width: dimensions[0],
-        height: dimensions[1],
-        n: quantity,
-        quality,
-        ...(referenceImages.length > 0
-          ? { images: referenceImages.map((media) => media.url) }
+        model: metadata.model,
+        group: metadata.group,
+        prompt: metadata.prompt,
+        seconds: metadata.seconds,
+        aspect_ratio: metadata.aspectRatio,
+        duration: Number(metadata.seconds),
+        width,
+        height,
+        n: metadata.n,
+        quality: metadata.qualityPreset,
+        ...(metadata.referenceImages?.length
+          ? { images: metadata.referenceImages }
           : {}),
-        ...(referenceVideos.length > 0
-          ? { videos: referenceVideos.map((media) => media.url) }
+        ...(metadata.referenceVideos?.length
+          ? { videos: metadata.referenceVideos }
           : {}),
-        ...(referenceAudio.length > 0
-          ? { audios: referenceAudio.map((media) => media.url) }
+        ...(metadata.referenceAudio?.length
+          ? { audios: metadata.referenceAudio }
           : {}),
       })
-      setTask(response)
+      saveVideoWorkspaceTask(response, metadata)
+      setTasks(loadVideoWorkspaceTasks())
     } catch (error) {
       toast.error(error instanceof Error ? error.message : t('Request failed'))
     } finally {
@@ -276,25 +234,59 @@ export function VideoWorkspace({
     }
   }
 
-  const handleClear = () => {
-    setPrompt('')
-    setReferenceImages([])
-    setReferenceVideos([])
-    setReferenceAudio([])
-    setTask(null)
-    taskMetadataRef.current = null
-    saveVideoWorkspaceTask(null)
+  const handleGenerate = async () => {
+    if (!prompt.trim() || !config.model) return
+
+    await createVideoTask({
+      aspectRatio: ratio,
+      group: config.group,
+      model: config.model,
+      n: quantity,
+      prompt: prompt.trim(),
+      qualityPreset: quality,
+      referenceAudio: referenceAudio.map((media) => media.url),
+      referenceImages: referenceImages.map((media) => media.url),
+      referenceVideos: referenceVideos.map((media) => media.url),
+      seconds: String(duration),
+    })
   }
 
-  const hasMedia =
-    referenceImages.length > 0 ||
-    referenceVideos.length > 0 ||
-    referenceAudio.length > 0
-  let resultDescription = t('Generated video appears here')
-  if (isFailed) {
-    resultDescription = task?.error?.message || t('Video generation failed')
-  } else if (taskId) {
-    resultDescription = t('Waiting for video...')
+  const handleRegenerate = (taskID: string) => {
+    const task = tasks.find((current) => current.taskId === taskID)
+    if (!task) return
+
+    onConfigChange('group', task.group)
+    onConfigChange('model', task.model)
+    setPrompt(task.prompt)
+    setRatio(task.aspectRatio)
+    setDuration(Number(task.seconds))
+    setQuality(task.qualityPreset)
+    setQuantity(task.n ?? 1)
+    setReferenceImages(toLocalMedia(task.referenceImages))
+    setReferenceVideos(toLocalMedia(task.referenceVideos))
+    setReferenceAudio(toLocalMedia(task.referenceAudio))
+    void createVideoTask({
+      aspectRatio: task.aspectRatio,
+      group: task.group,
+      model: task.model,
+      n: task.n ?? 1,
+      prompt: task.prompt,
+      qualityPreset: task.qualityPreset,
+      referenceAudio: task.referenceAudio,
+      referenceImages: task.referenceImages,
+      referenceVideos: task.referenceVideos,
+      seconds: task.seconds,
+    })
+  }
+
+  const handleDelete = (taskID: string) => {
+    deleteVideoWorkspaceTask(taskID)
+    setTasks((current) => current.filter((task) => task.taskId !== taskID))
+  }
+
+  const handleClearAll = () => {
+    clearVideoWorkspaceTasks()
+    setTasks([])
   }
 
   const renderMediaCard = (
@@ -400,16 +392,6 @@ export function VideoWorkspace({
             <FilmIcon className='size-4' />
             {t('Video')}
           </div>
-          <Button
-            disabled={isSubmitting || (!prompt && !task && !hasMedia)}
-            onClick={handleClear}
-            size='sm'
-            type='button'
-            variant='ghost'
-          >
-            <Trash2Icon />
-            {t('Clear')}
-          </Button>
         </div>
       </header>
       <div className='flex-1 overflow-y-auto px-4 py-4 md:px-6'>
@@ -601,27 +583,13 @@ export function VideoWorkspace({
             </Button>
           </section>
 
-          <section className='border-border/70 flex min-h-80 min-w-0 items-center justify-center rounded-lg border border-dashed p-8 text-center'>
-            {videoURL ? (
-              <video
-                className='max-h-[70vh] max-w-full rounded-lg border bg-black'
-                controls
-                src={videoURL}
-              />
-            ) : (
-              <div className='text-muted-foreground flex flex-col items-center gap-2 text-center text-sm'>
-                {taskId && !isFailed ? (
-                  <LoaderCircleIcon className='size-9 animate-spin' />
-                ) : (
-                  <FilmIcon className='size-9' />
-                )}
-                <strong className='text-foreground'>
-                  {isFailed ? t('Video generation failed') : t('No videos yet')}
-                </strong>
-                <span>{resultDescription}</span>
-              </div>
-            )}
-          </section>
+          <VideoGenerationHistory
+            isRegenerating={isSubmitting}
+            onClear={handleClearAll}
+            onDelete={handleDelete}
+            onRegenerate={handleRegenerate}
+            tasks={tasks}
+          />
         </div>
       </div>
     </div>

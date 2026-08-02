@@ -21,7 +21,6 @@ import {
   ImagePlusIcon,
   LoaderCircleIcon,
   SparklesIcon,
-  Trash2Icon,
   UploadIcon,
   XIcon,
 } from 'lucide-react'
@@ -43,13 +42,23 @@ import {
 import { Textarea } from '@/components/ui/textarea'
 
 import { generateImage, uploadPlaygroundAsset } from '../../api'
-import { loadImageWorkspaceResult, saveImageWorkspaceResult } from '../../lib'
+import {
+  clearImageWorkspaceItems,
+  deleteImageWorkspaceItem,
+  loadImageWorkspaceItems,
+  saveImageWorkspaceResult,
+} from '../../lib'
+import type {
+  ImageWorkspaceItem,
+  ImageWorkspaceMetadata,
+} from '../../lib/storage/storage'
 import type {
   GroupOption,
-  ImageGenerationResponse,
+  ImageGenerationRequest,
   ModelOption,
   PlaygroundConfig,
 } from '../../types'
+import { ImageGenerationHistory } from './media-generation-history'
 
 type ImageWorkspaceProps = {
   config: PlaygroundConfig
@@ -98,8 +107,8 @@ export function ImageWorkspace({
   const [quality, setQuality] = useState('auto')
   const [quantity, setQuantity] = useState(1)
   const [references, setReferences] = useState<string[]>([])
-  const [result, setResult] = useState<ImageGenerationResponse | null>(
-    loadImageWorkspaceResult
+  const [items, setItems] = useState<ImageWorkspaceItem[]>(
+    loadImageWorkspaceItems
   )
   const [isGenerating, setIsGenerating] = useState(false)
 
@@ -118,31 +127,15 @@ export function ImageWorkspace({
     }
   }
 
-  const handleGenerate = async () => {
-    if (!prompt.trim() || !config.model) return
-
+  const generate = async (
+    request: ImageGenerationRequest,
+    metadata: ImageWorkspaceMetadata
+  ) => {
     setIsGenerating(true)
     try {
-      const response = await generateImage({
-        model: config.model,
-        group: config.group,
-        prompt: prompt.trim(),
-        n: quantity,
-        size,
-        ...(quality !== 'auto' ? { quality } : {}),
-        ...(references.length > 0 ? { images: references } : {}),
-      })
-      setResult(response)
-      saveImageWorkspaceResult(response, {
-        aspectRatio:
-          imageSizeOptions.find((option) => option.value === size)?.label ??
-          '1:1',
-        group: config.group,
-        model: config.model,
-        n: quantity,
-        prompt: prompt.trim(),
-        qualityPreset: quality,
-      })
+      const response = await generateImage(request)
+      saveImageWorkspaceResult(response, metadata)
+      setItems(loadImageWorkspaceItems())
     } catch (error) {
       toast.error(error instanceof Error ? error.message : t('Request failed'))
     } finally {
@@ -150,14 +143,86 @@ export function ImageWorkspace({
     }
   }
 
-  const handleClear = () => {
-    setPrompt('')
-    setReferences([])
-    setResult(null)
-    saveImageWorkspaceResult(null)
+  const handleGenerate = async () => {
+    if (!prompt.trim() || !config.model) return
+
+    const aspectRatio =
+      imageSizeOptions.find((option) => option.value === size)?.label ?? '1:1'
+    await generate(
+      {
+        model: config.model,
+        group: config.group,
+        prompt: prompt.trim(),
+        n: quantity,
+        size,
+        ...(quality !== 'auto' ? { quality } : {}),
+        ...(references.length > 0 ? { images: references } : {}),
+      },
+      {
+        aspectRatio,
+        group: config.group,
+        model: config.model,
+        n: quantity,
+        prompt: prompt.trim(),
+        qualityPreset: quality,
+        referenceImages: references,
+        size,
+      }
+    )
   }
 
-  const images = result?.data ?? []
+  const handleRegenerate = (id: string) => {
+    const item = items.find((current) => current.id === id)
+    if (!item) return
+
+    const itemSize =
+      item.size ??
+      imageSizeOptions.find((option) => option.label === item.aspectRatio)
+        ?.value ??
+      '1024x1024'
+    onConfigChange('group', item.group)
+    onConfigChange('model', item.model)
+    setPrompt(item.prompt)
+    setSize(itemSize)
+    setQuality(item.qualityPreset)
+    setQuantity(item.n)
+    setReferences(item.referenceImages ?? [])
+    void generate(
+      {
+        model: item.model,
+        group: item.group,
+        prompt: item.prompt,
+        n: item.n,
+        size: itemSize,
+        ...(item.qualityPreset !== 'auto'
+          ? { quality: item.qualityPreset }
+          : {}),
+        ...(item.referenceImages?.length
+          ? { images: item.referenceImages }
+          : {}),
+      },
+      {
+        aspectRatio: item.aspectRatio,
+        group: item.group,
+        model: item.model,
+        n: item.n,
+        prompt: item.prompt,
+        qualityPreset: item.qualityPreset,
+        referenceImages: item.referenceImages,
+        size: itemSize,
+      }
+    )
+  }
+
+  const handleDelete = (id: string) => {
+    deleteImageWorkspaceItem(id)
+    setItems((current) => current.filter((item) => item.id !== id))
+  }
+
+  const handleClearAll = () => {
+    clearImageWorkspaceItems()
+    setItems([])
+  }
 
   return (
     <div className='flex min-h-0 flex-1 flex-col overflow-hidden'>
@@ -167,18 +232,6 @@ export function ImageWorkspace({
             <ImageIcon className='size-4' />
             {t('Image')}
           </div>
-          <Button
-            disabled={
-              isGenerating || (!prompt && !result && references.length === 0)
-            }
-            onClick={handleClear}
-            size='sm'
-            type='button'
-            variant='ghost'
-          >
-            <Trash2Icon />
-            {t('Clear')}
-          </Button>
         </div>
       </header>
       <div className='flex-1 overflow-y-auto px-4 py-4 md:px-6'>
@@ -383,36 +436,13 @@ export function ImageWorkspace({
             </Button>
           </section>
 
-          <section className='border-border/70 flex min-h-80 min-w-0 items-center justify-center rounded-lg border border-dashed p-8 text-center'>
-            {images.length > 0 ? (
-              <div className='grid w-full max-w-5xl gap-4 sm:grid-cols-2'>
-                {images.map((image, index) => (
-                  <img
-                    alt={
-                      image.revised_prompt ||
-                      t('Generated image {{index}}', { index: index + 1 })
-                    }
-                    className='bg-muted aspect-square w-full rounded-lg border object-contain'
-                    key={image.url || image.b64_json || index}
-                    src={
-                      image.url ||
-                      (image.b64_json
-                        ? `data:image/png;base64,${image.b64_json}`
-                        : undefined)
-                    }
-                  />
-                ))}
-              </div>
-            ) : (
-              <div className='text-muted-foreground flex flex-col items-center gap-2 text-center text-sm'>
-                <ImageIcon className='size-9' />
-                <strong className='text-foreground'>
-                  {t('No images yet')}
-                </strong>
-                <span>{t('Generated images appear here')}</span>
-              </div>
-            )}
-          </section>
+          <ImageGenerationHistory
+            isRegenerating={isGenerating}
+            items={items}
+            onClear={handleClearAll}
+            onDelete={handleDelete}
+            onRegenerate={handleRegenerate}
+          />
         </div>
       </div>
     </div>

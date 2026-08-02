@@ -116,6 +116,8 @@ const imageWorkspaceItemSchema = z.object({
   createdAt: z.number(),
   status: z.enum(['loading', 'completed', 'error']),
   error: z.string().optional(),
+  size: z.string().optional(),
+  referenceImages: z.array(z.string()).optional(),
   data: z.array(imageResultSchema),
 })
 
@@ -159,7 +161,7 @@ const videoWorkspaceConfigSchema = z.object({
   aspectRatio: z.string(),
   seconds: z.string(),
   qualityPreset: z.string(),
-  n: z.literal(1),
+  n: z.number().int().min(1).max(10),
 })
 
 const videoWorkspaceTaskSchema = videoTaskResponseSchema.extend({
@@ -171,6 +173,10 @@ const videoWorkspaceTaskSchema = videoTaskResponseSchema.extend({
   aspectRatio: z.string(),
   seconds: z.string(),
   qualityPreset: z.string(),
+  n: z.number().int().min(1).max(10).optional(),
+  referenceImages: z.array(z.string()).optional(),
+  referenceVideos: z.array(z.string()).optional(),
+  referenceAudio: z.array(z.string()).optional(),
   createdAt: z.number(),
 })
 

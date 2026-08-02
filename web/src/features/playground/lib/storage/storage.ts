@@ -63,7 +63,7 @@ type ImageWorkspaceConfig = {
   response_format: 'url'
 }
 
-type ImageWorkspaceItem = {
+export type ImageWorkspaceItem = {
   id: string
   prompt: string
   model: string
@@ -74,6 +74,8 @@ type ImageWorkspaceItem = {
   createdAt: number
   status: 'loading' | 'completed' | 'error'
   error?: string
+  size?: string
+  referenceImages?: string[]
   data: ImageGenerationResponse['data']
 }
 
@@ -83,10 +85,10 @@ type VideoWorkspaceConfig = {
   aspectRatio: string
   seconds: string
   qualityPreset: string
-  n: 1
+  n: number
 }
 
-type VideoWorkspaceTask = VideoTaskResponse & {
+export type VideoWorkspaceTask = VideoTaskResponse & {
   id: string
   taskId: string
   model: string
@@ -95,7 +97,35 @@ type VideoWorkspaceTask = VideoTaskResponse & {
   aspectRatio: string
   seconds: string
   qualityPreset: string
+  n?: number
+  referenceImages?: string[]
+  referenceVideos?: string[]
+  referenceAudio?: string[]
   createdAt: number
+}
+
+export type ImageWorkspaceMetadata = {
+  aspectRatio: string
+  group: string
+  model: string
+  n: number
+  prompt: string
+  qualityPreset: string
+  referenceImages?: string[]
+  size: string
+}
+
+export type VideoWorkspaceMetadata = {
+  aspectRatio: string
+  group: string
+  model: string
+  n: number
+  prompt: string
+  qualityPreset: string
+  referenceAudio?: string[]
+  referenceImages?: string[]
+  referenceVideos?: string[]
+  seconds: string
 }
 
 type PlaygroundWorkspace = {
@@ -650,7 +680,7 @@ export function saveMessages(messages: Message[]): void {
 
 export function loadImageWorkspaceResult(): ImageGenerationResponse | null {
   try {
-    const item = loadWorkspace().image.items[0]
+    const item = loadImageWorkspaceItems()[0]
     return item ? { data: item.data } : null
   } catch (error) {
     // eslint-disable-next-line no-console
@@ -659,16 +689,19 @@ export function loadImageWorkspaceResult(): ImageGenerationResponse | null {
   return null
 }
 
+export function loadImageWorkspaceItems(): ImageWorkspaceItem[] {
+  try {
+    return loadWorkspace().image.items
+  } catch (error) {
+    // eslint-disable-next-line no-console
+    console.error('Failed to load image workspace items:', error)
+  }
+  return []
+}
+
 export function saveImageWorkspaceResult(
   imageResult: ImageGenerationResponse | null,
-  metadata?: {
-    aspectRatio: string
-    group: string
-    model: string
-    n: number
-    prompt: string
-    qualityPreset: string
-  }
+  metadata?: ImageWorkspaceMetadata
 ): void {
   try {
     updateWorkspace((workspace) => {
@@ -699,6 +732,8 @@ export function saveImageWorkspaceResult(
         n: imageConfig.n,
         createdAt: Date.now(),
         status: 'completed',
+        size: metadata?.size,
+        referenceImages: metadata?.referenceImages,
         data: imageResult.data,
       }
 
@@ -716,9 +751,26 @@ export function saveImageWorkspaceResult(
   }
 }
 
+export function deleteImageWorkspaceItem(id: string): void {
+  updateWorkspace((workspace) => ({
+    ...workspace,
+    image: {
+      ...workspace.image,
+      items: workspace.image.items.filter((item) => item.id !== id),
+    },
+  }))
+}
+
+export function clearImageWorkspaceItems(): void {
+  updateWorkspace((workspace) => ({
+    ...workspace,
+    image: { ...workspace.image, items: [] },
+  }))
+}
+
 export function loadVideoWorkspaceTask(): VideoTaskResponse | null {
   try {
-    const task = loadWorkspace().video.tasks[0]
+    const task = loadVideoWorkspaceTasks()[0]
     if (!task) return null
 
     const { taskId, ...videoTask } = task
@@ -730,16 +782,19 @@ export function loadVideoWorkspaceTask(): VideoTaskResponse | null {
   return null
 }
 
+export function loadVideoWorkspaceTasks(): VideoWorkspaceTask[] {
+  try {
+    return loadWorkspace().video.tasks
+  } catch (error) {
+    // eslint-disable-next-line no-console
+    console.error('Failed to load video workspace tasks:', error)
+  }
+  return []
+}
+
 export function saveVideoWorkspaceTask(
   videoTask: VideoTaskResponse | null,
-  metadata?: {
-    aspectRatio: string
-    group: string
-    model: string
-    prompt: string
-    qualityPreset: string
-    seconds: string
-  }
+  metadata?: VideoWorkspaceMetadata
 ): void {
   try {
     updateWorkspace((workspace) => {
@@ -762,7 +817,7 @@ export function saveVideoWorkspaceTask(
             aspectRatio: metadata.aspectRatio,
             seconds: metadata.seconds,
             qualityPreset: metadata.qualityPreset,
-            n: 1,
+            n: metadata.n,
           }
         : workspace.video.config
       const existingTask = workspace.video.tasks.find(
@@ -786,6 +841,13 @@ export function saveVideoWorkspaceTask(
           metadata?.qualityPreset ??
           existingTask?.qualityPreset ??
           videoConfig.qualityPreset,
+        n: metadata?.n ?? existingTask?.n ?? videoConfig.n,
+        referenceImages:
+          metadata?.referenceImages ?? existingTask?.referenceImages,
+        referenceVideos:
+          metadata?.referenceVideos ?? existingTask?.referenceVideos,
+        referenceAudio:
+          metadata?.referenceAudio ?? existingTask?.referenceAudio,
         createdAt: existingTask?.createdAt ?? Date.now(),
       }
 
@@ -805,6 +867,23 @@ export function saveVideoWorkspaceTask(
     // eslint-disable-next-line no-console
     console.error('Failed to save video workspace:', error)
   }
+}
+
+export function deleteVideoWorkspaceTask(taskId: string): void {
+  updateWorkspace((workspace) => ({
+    ...workspace,
+    video: {
+      ...workspace.video,
+      tasks: workspace.video.tasks.filter((task) => task.taskId !== taskId),
+    },
+  }))
+}
+
+export function clearVideoWorkspaceTasks(): void {
+  updateWorkspace((workspace) => ({
+    ...workspace,
+    video: { ...workspace.video, tasks: [] },
+  }))
 }
 
 export function loadPlaygroundMode(): PlaygroundMode {

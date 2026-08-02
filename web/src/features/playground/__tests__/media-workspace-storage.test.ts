@@ -4,7 +4,13 @@ import { afterEach, beforeEach, describe, test } from 'node:test'
 import { STORAGE_KEYS } from '../constants'
 import {
   clearPlaygroundData,
+  clearImageWorkspaceItems,
+  clearVideoWorkspaceTasks,
+  deleteImageWorkspaceItem,
+  deleteVideoWorkspaceTask,
+  loadImageWorkspaceItems,
   loadImageWorkspaceResult,
+  loadVideoWorkspaceTasks,
   loadVideoWorkspaceTask,
   saveImageWorkspaceResult,
   saveVideoWorkspaceTask,
@@ -90,5 +96,90 @@ describe('media workspace storage', () => {
     clearPlaygroundData()
 
     assert.equal(localStorage.getItem(STORAGE_KEYS.WORKSPACE), null)
+  })
+
+  test('keeps multiple image records and removes only the selected record', () => {
+    saveImageWorkspaceResult(
+      { data: [{ url: 'https://example.com/first.png' }] },
+      {
+        aspectRatio: '1:1',
+        group: 'default',
+        model: 'gpt-image-2',
+        n: 1,
+        prompt: 'first image',
+        qualityPreset: 'hd',
+        size: '1024x1024',
+      }
+    )
+    saveImageWorkspaceResult(
+      { data: [{ url: 'https://example.com/second.png' }] },
+      {
+        aspectRatio: '16:9',
+        group: 'default',
+        model: 'gpt-image-2',
+        n: 2,
+        prompt: 'second image',
+        qualityPreset: 'auto',
+        size: '1792x1024',
+      }
+    )
+
+    const items = loadImageWorkspaceItems()
+    assert.equal(items.length, 2)
+    assert.equal(items[0]?.prompt, 'second image')
+    assert.equal(items[0]?.size, '1792x1024')
+
+    deleteImageWorkspaceItem(items[0]?.id ?? '')
+
+    assert.equal(loadImageWorkspaceItems().length, 1)
+    assert.equal(loadImageWorkspaceItems()[0]?.prompt, 'first image')
+
+    clearImageWorkspaceItems()
+    assert.deepEqual(loadImageWorkspaceItems(), [])
+  })
+
+  test('keeps multiple video tasks and preserves their generation settings', () => {
+    saveVideoWorkspaceTask(
+      { task_id: 'task_first', status: 'queued' },
+      {
+        aspectRatio: '16:9',
+        group: 'default',
+        model: 'as-sd2.0-fast',
+        n: 1,
+        prompt: 'first video',
+        qualityPreset: 'hd',
+        referenceImages: ['https://example.com/reference.png'],
+        seconds: '15',
+      }
+    )
+    saveVideoWorkspaceTask(
+      { task_id: 'task_second', status: 'processing' },
+      {
+        aspectRatio: '9:16',
+        group: 'default',
+        model: 'as-sd2.0-fast',
+        n: 2,
+        prompt: 'second video',
+        qualityPreset: 'fast',
+        referenceAudio: ['https://example.com/music.mp3'],
+        seconds: '10',
+      }
+    )
+
+    const tasks = loadVideoWorkspaceTasks()
+    assert.equal(tasks.length, 2)
+    assert.equal(tasks[0]?.taskId, 'task_second')
+    assert.equal(tasks[0]?.n, 2)
+    assert.deepEqual(tasks[0]?.referenceAudio, [
+      'https://example.com/music.mp3',
+    ])
+
+    deleteVideoWorkspaceTask('task_second')
+
+    assert.equal(loadVideoWorkspaceTasks().length, 1)
+    assert.equal(loadVideoWorkspaceTasks()[0]?.taskId, 'task_first')
+
+    clearVideoWorkspaceTasks()
+    assert.deepEqual(loadVideoWorkspaceTasks(), [])
   })
 })
