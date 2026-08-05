@@ -45,6 +45,9 @@ var buildFS embed.FS
 //go:embed web/dist/index.html
 var indexPage []byte
 
+//go:embed docs/silicogrove-api-docs.html
+var silicoGroveDocsPage []byte
+
 func main() {
 	startTime := time.Now()
 	kitutil.SetLogging(common.SysLog, func(message string) {
@@ -198,6 +201,7 @@ func main() {
 	router.SetRouter(server, router.WebAssets{
 		BuildFS:   buildFS,
 		IndexPage: indexPage,
+		DocsPage:  silicoGroveDocsPage,
 	})
 	var port = os.Getenv("PORT")
 	if port == "" {
