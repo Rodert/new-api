@@ -4,7 +4,8 @@
 .vscode
 .gitignore
 Makefile
-docs
+docs/*
+!docs/silicogrove-api-docs.html
 .eslintcache
 .gocache
 /web/node_modules
