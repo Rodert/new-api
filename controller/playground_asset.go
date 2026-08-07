@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/QuantumNous/new-api/common"
 
@@ -109,7 +110,7 @@ func PlaygroundAssetFetch(c *gin.Context) {
 	metadata, err := loadPlaygroundAssetMetadata(assetID)
 	if err != nil || metadata.ExpiresAt <= time.Now().Unix() {
 		if metadata.ExpiresAt > 0 && metadata.ExpiresAt <= time.Now().Unix() {
-			_ = os.Remove(playgroundAssetPath(assetID))
+			removePlaygroundAssetFiles(assetID, metadata)
 			_ = os.Remove(playgroundAssetMetadataPath(assetID))
 		}
 		c.Status(http.StatusNotFound)
@@ -118,7 +119,12 @@ func PlaygroundAssetFetch(c *gin.Context) {
 
 	c.Header("Content-Type", metadata.ContentType)
 	c.Header("Cache-Control", "public, max-age=3600")
-	http.ServeFile(c.Writer, c.Request, playgroundAssetPath(assetID))
+	assetPath := playgroundAssetPath(assetID, metadata.Filename)
+	if _, statErr := os.Stat(assetPath); os.IsNotExist(statErr) {
+		// Fall back to assets created before filenames gained extensions.
+		assetPath = playgroundAssetPath(assetID)
+	}
+	http.ServeFile(c.Writer, c.Request, assetPath)
 }
 
 func playgroundAssetConstraints(kind string) (int64, map[string]bool, bool) {
@@ -160,24 +166,25 @@ func savePlaygroundAsset(assetID string, file *multipart.FileHeader, metadata pl
 	}
 	defer source.Close()
 
-	destination, err := os.OpenFile(playgroundAssetPath(assetID), os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	assetPath := playgroundAssetPath(assetID, metadata.Filename)
+	destination, err := os.OpenFile(assetPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
 	if err != nil {
 		return err
 	}
 	_, copyErr := io.Copy(destination, source)
 	closeErr := destination.Close()
 	if copyErr != nil {
-		_ = os.Remove(playgroundAssetPath(assetID))
+		_ = os.Remove(assetPath)
 		return copyErr
 	}
 	if closeErr != nil {
-		_ = os.Remove(playgroundAssetPath(assetID))
+		_ = os.Remove(assetPath)
 		return closeErr
 	}
 
 	data, err := common.Marshal(metadata)
 	if err != nil {
-		_ = os.Remove(playgroundAssetPath(assetID))
+		_ = os.Remove(assetPath)
 		return err
 	}
 	if err := os.WriteFile(playgroundAssetMetadataPath(assetID), data, 0o600); err != nil {
@@ -199,8 +206,31 @@ func loadPlaygroundAssetMetadata(assetID string) (playgroundAssetMetadata, error
 	return metadata, nil
 }
 
-func playgroundAssetPath(assetID string) string {
-	return filepath.Join(playgroundAssetDirectory, assetID)
+func playgroundAssetPath(assetID string, filename ...string) string {
+	name := assetID
+	if len(filename) > 0 {
+		name += safePlaygroundAssetExtension(filename[0])
+	}
+	return filepath.Join(playgroundAssetDirectory, name)
+}
+
+func safePlaygroundAssetExtension(filename string) string {
+	ext := filepath.Ext(filepath.Base(filename))
+	if len(ext) < 2 || len(ext) > 16 {
+		return ""
+	}
+	for _, r := range ext[1:] {
+		if !unicode.IsLetter(r) && !unicode.IsDigit(r) {
+			return ""
+		}
+	}
+	return strings.ToLower(ext)
+}
+
+func removePlaygroundAssetFiles(assetID string, metadata playgroundAssetMetadata) {
+	_ = os.Remove(playgroundAssetPath(assetID, metadata.Filename))
+	// Assets created before extensions were added used the bare UUID path.
+	_ = os.Remove(playgroundAssetPath(assetID))
 }
 
 func playgroundAssetMetadataPath(assetID string) string {
@@ -246,12 +276,10 @@ func cleanupExpiredPlaygroundAssets(now time.Time) {
 			}
 		}
 
-		if err := os.Remove(playgroundAssetPath(assetID)); err != nil && !os.IsNotExist(err) {
+		removePlaygroundAssetFiles(assetID, metadata)
+		if err := os.Remove(playgroundAssetMetadataPath(assetID)); err != nil && !os.IsNotExist(err) {
 			common.SysError(fmt.Sprintf("failed to remove expired playground asset: %s", err.Error()))
 			continue
-		}
-		if err := os.Remove(playgroundAssetMetadataPath(assetID)); err != nil && !os.IsNotExist(err) {
-			common.SysError(fmt.Sprintf("failed to remove expired playground asset metadata: %s", err.Error()))
 		}
 	}
 
@@ -259,7 +287,7 @@ func cleanupExpiredPlaygroundAssets(now time.Time) {
 		if entry.IsDir() || strings.HasSuffix(entry.Name(), ".json") {
 			continue
 		}
-		assetID := entry.Name()
+		assetID := strings.SplitN(entry.Name(), ".", 2)[0]
 		if _, err := uuid.Parse(assetID); err != nil {
 			continue
 		}
@@ -272,7 +300,7 @@ func cleanupExpiredPlaygroundAssets(now time.Time) {
 		if err != nil || now.Sub(info.ModTime()) <= playgroundAssetLifetime {
 			continue
 		}
-		if err := os.Remove(playgroundAssetPath(assetID)); err != nil && !os.IsNotExist(err) {
+		if err := os.Remove(filepath.Join(playgroundAssetDirectory, entry.Name())); err != nil && !os.IsNotExist(err) {
 			common.SysError(fmt.Sprintf("failed to remove orphaned playground asset: %s", err.Error()))
 		}
 	}
