@@ -1,6 +1,7 @@
 package service
 
 import (
+	"slices"
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
@@ -119,6 +120,30 @@ func GetGroupsEnabledModels(groups []string) []string {
 		}
 	}
 	return models
+}
+
+// GetGroupsEnabledModelsForEndpoint returns models that have an enabled channel
+// in the supplied groups for the requested endpoint type.
+func GetGroupsEnabledModelsForEndpoint(groups []string, endpointType constant.EndpointType) ([]string, error) {
+	modelEndpointTypes, err := model.GetGroupsEnabledModelEndpointTypes(groups)
+	if err != nil {
+		return nil, err
+	}
+
+	models := make([]string, 0)
+	for _, modelName := range GetGroupsEnabledModels(groups) {
+		endpointTypes := modelEndpointTypes[modelName]
+		hasEndpoint := slices.Contains(endpointTypes, endpointType)
+		if endpointType == constant.EndpointTypeOpenAI {
+			hasEndpoint = hasEndpoint &&
+				!slices.Contains(endpointTypes, constant.EndpointTypeImageGeneration) &&
+				!slices.Contains(endpointTypes, constant.EndpointTypeOpenAIVideo)
+		}
+		if hasEndpoint {
+			models = append(models, modelName)
+		}
+	}
+	return models, nil
 }
 
 // GetUserGroupRatio 获取用户使用某个分组的倍率
