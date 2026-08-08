@@ -38,3 +38,18 @@ func TestRelayRouterRegistersPlaygroundAssetUploadRoute(t *testing.T) {
 
 	require.Fail(t, "POST /pg/assets route is not registered")
 }
+
+func TestRelayRouterRegistersPlaygroundImageRoutes(t *testing.T) {
+	engine := gin.New()
+	SetRelayRouter(engine)
+
+	routes := make(map[string]bool)
+	for _, route := range engine.Routes() {
+		if route.Method == http.MethodPost {
+			routes[route.Path] = true
+		}
+	}
+
+	require.True(t, routes["/pg/images/generations"])
+	require.True(t, routes["/pg/images/edits"])
+}

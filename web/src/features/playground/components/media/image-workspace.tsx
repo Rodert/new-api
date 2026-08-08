@@ -41,7 +41,7 @@ import {
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 
-import { generateImage, uploadPlaygroundAsset } from '../../api'
+import { editImage, generateImage, uploadPlaygroundAsset } from '../../api'
 import {
   clearImageWorkspaceItems,
   deleteImageWorkspaceItem,
@@ -71,7 +71,13 @@ type ImageWorkspaceProps = {
   ) => void
 }
 
-const maxReferenceImages = 14
+type ImageReference = {
+  file?: File
+  url: string
+}
+
+const maxReferenceImages = 1
+const maxReferenceImageBytes = 10 * 1024 * 1024
 const imageSizeOptions = [
   { label: '1:1', value: '1024x1024' },
   { label: '16:9', value: '1792x1024' },
@@ -106,7 +112,8 @@ export function ImageWorkspace({
   const [size, setSize] = useState('1024x1024')
   const [quality, setQuality] = useState('auto')
   const [quantity, setQuantity] = useState(1)
-  const [references, setReferences] = useState<string[]>([])
+  const [references, setReferences] = useState<ImageReference[]>([])
+  const uploadedFilesRef = useRef(new Map<string, File>())
   const [items, setItems] = useState<ImageWorkspaceItem[]>(
     loadImageWorkspaceItems
   )
@@ -116,8 +123,16 @@ export function ImageWorkspace({
     if (!files?.length) return
 
     try {
+      if ([...files].some((file) => file.size > maxReferenceImageBytes)) {
+        toast.error(t('Unable to read image'))
+        return
+      }
       const nextReferences = await Promise.all(
-        [...files].map((file) => uploadPlaygroundAsset(file, 'image'))
+        [...files].map(async (file) => {
+          const url = await uploadPlaygroundAsset(file, 'image')
+          uploadedFilesRef.current.set(url, file)
+          return { file, url }
+        })
       )
       setReferences((current) =>
         [...current, ...nextReferences].slice(0, maxReferenceImages)
@@ -129,11 +144,14 @@ export function ImageWorkspace({
 
   const generate = async (
     request: ImageGenerationRequest,
-    metadata: ImageWorkspaceMetadata
+    metadata: ImageWorkspaceMetadata,
+    images: File[] = []
   ) => {
     setIsGenerating(true)
     try {
-      const response = await generateImage(request)
+      const response = images.length
+        ? await editImage(request, images)
+        : await generateImage(request)
       saveImageWorkspaceResult(response, metadata)
       setItems(loadImageWorkspaceItems())
     } catch (error) {
@@ -148,6 +166,14 @@ export function ImageWorkspace({
 
     const aspectRatio =
       imageSizeOptions.find((option) => option.value === size)?.label ?? '1:1'
+    const images = references.flatMap((reference) =>
+      reference.file ? [reference.file] : []
+    )
+    if (images.length !== references.length) {
+      toast.error(t('Unable to read image'))
+      return
+    }
+    const referenceImages = references.map((reference) => reference.url)
     await generate(
       {
         model: config.model,
@@ -156,7 +182,6 @@ export function ImageWorkspace({
         n: quantity,
         size,
         ...(quality !== 'auto' ? { quality } : {}),
-        ...(references.length > 0 ? { images: references } : {}),
       },
       {
         aspectRatio,
@@ -165,9 +190,10 @@ export function ImageWorkspace({
         n: quantity,
         prompt: prompt.trim(),
         qualityPreset: quality,
-        referenceImages: references,
+        referenceImages,
         size,
-      }
+      },
+      images
     )
   }
 
@@ -186,7 +212,18 @@ export function ImageWorkspace({
     setSize(itemSize)
     setQuality(item.qualityPreset)
     setQuantity(item.n)
-    setReferences(item.referenceImages ?? [])
+    const itemReferences = (item.referenceImages ?? []).map((url) => ({
+      file: uploadedFilesRef.current.get(url),
+      url,
+    }))
+    setReferences(itemReferences)
+    const images = itemReferences.flatMap((reference) =>
+      reference.file ? [reference.file] : []
+    )
+    if (images.length !== itemReferences.length) {
+      toast.error(t('Unable to read image'))
+      return
+    }
     void generate(
       {
         model: item.model,
@@ -196,9 +233,6 @@ export function ImageWorkspace({
         size: itemSize,
         ...(item.qualityPreset !== 'auto'
           ? { quality: item.qualityPreset }
-          : {}),
-        ...(item.referenceImages?.length
-          ? { images: item.referenceImages }
           : {}),
       },
       {
@@ -210,7 +244,8 @@ export function ImageWorkspace({
         qualityPreset: item.qualityPreset,
         referenceImages: item.referenceImages,
         size: itemSize,
-      }
+      },
+      images
     )
   }
 
@@ -352,7 +387,6 @@ export function ImageWorkspace({
                 <input
                   accept='image/png,image/jpeg,image/webp'
                   className='sr-only'
-                  multiple
                   onChange={(event) => {
                     void handleFiles(event.target.files)
                     event.currentTarget.value = ''
@@ -376,13 +410,13 @@ export function ImageWorkspace({
               {references.length > 0 ? (
                 <div className='mt-3 flex flex-wrap gap-2'>
                   {references.map((reference, index) => (
-                    <div className='relative size-14' key={reference}>
+                    <div className='relative size-14' key={reference.url}>
                       <img
                         alt={t('Reference image {{index}}', {
                           index: index + 1,
                         })}
                         className='size-full rounded-md border object-cover'
-                        src={reference}
+                        src={reference.url}
                       />
                       <Button
                         aria-label={t('Remove reference image {{index}}', {

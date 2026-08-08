@@ -83,6 +83,7 @@ func SetRelayRouter(router *gin.Engine) {
 		playgroundSubmitRouter.Use(middleware.Distribute())
 		playgroundSubmitRouter.POST("/chat/completions", controller.Playground)
 		playgroundSubmitRouter.POST("/images/generations", controller.PlaygroundImage)
+		playgroundSubmitRouter.POST("/images/edits", controller.PlaygroundImage)
 		playgroundSubmitRouter.POST("/videos", func(c *gin.Context) {
 			c.Set("relay_mode", relayconstant.RelayModeVideoSubmit)
 			controller.PlaygroundTask(c)

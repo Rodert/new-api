@@ -22,7 +22,7 @@ var (
 )
 
 const (
-	maxImageAssetSize = 20 << 20
+	maxImageAssetSize = 10 << 20
 	maxVideoAssetSize = 100 << 20
 	maxAudioAssetSize = 20 << 20
 )

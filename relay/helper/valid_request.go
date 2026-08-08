@@ -213,6 +213,15 @@ func GetAndValidOpenAIImageRequest(c *gin.Context, relayMode int) (*dto.ImageReq
 			if imageValue := formData.Get("image"); imageValue != "" {
 				imageRequest.Image, _ = common.Marshal(imageValue)
 			}
+			if strings.HasPrefix(c.Request.URL.Path, "/pg/") {
+				for _, files := range form.File {
+					for _, file := range files {
+						if file.Size > 10<<20 {
+							return nil, errors.New("image file must be no larger than 10 MB")
+						}
+					}
+				}
+			}
 
 			if imageRequest.Model == "gpt-image-1" {
 				if imageRequest.Quality == "" {

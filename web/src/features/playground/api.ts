@@ -19,6 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 import { api } from '@/lib/api'
 
 import { API_ENDPOINTS } from './constants'
+import { createImageEditFormData } from './lib/image-request'
 import type {
   ChatCompletionRequest,
   ChatCompletionResponse,
@@ -51,6 +52,18 @@ export async function generateImage(
   const res = await api.post(API_ENDPOINTS.IMAGE_GENERATIONS, payload, {
     skipErrorHandler: true,
   } as Record<string, unknown>)
+  return res.data
+}
+
+export async function editImage(
+  payload: ImageGenerationRequest,
+  images: File[]
+): Promise<ImageGenerationResponse> {
+  const res = await api.post(
+    API_ENDPOINTS.IMAGE_EDITS,
+    createImageEditFormData(payload, images),
+    { skipErrorHandler: true } as Record<string, unknown>
+  )
   return res.data
 }
 

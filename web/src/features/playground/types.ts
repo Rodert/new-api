@@ -124,7 +124,6 @@ export interface ImageGenerationRequest {
   n: number
   size: string
   quality?: string
-  images?: string[]
 }
 
 export interface ImageGenerationResponse {
