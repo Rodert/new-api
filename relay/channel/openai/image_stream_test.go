@@ -2,6 +2,7 @@ package openai
 
 import (
 	"context"
+	"encoding/base64"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -15,6 +16,19 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 )
+
+func TestDecodeImageBase64ValidatesImageContent(t *testing.T) {
+	png := append([]byte("\x89PNG\r\n\x1a\n"), make([]byte, 512)...)
+
+	contentType, payload, ok := decodeImageBase64(base64.StdEncoding.EncodeToString(png), "png")
+
+	require.True(t, ok)
+	require.Equal(t, "image/png", contentType)
+	require.Equal(t, png, payload)
+
+	_, _, ok = decodeImageBase64(base64.StdEncoding.EncodeToString([]byte("<html>not an image</html>")), "png")
+	require.False(t, ok)
+}
 
 func newImageTestContext(t *testing.T, body, contentType string, isStream bool) (*gin.Context, *httptest.ResponseRecorder, *http.Response, *relaycommon.RelayInfo) {
 	t.Helper()

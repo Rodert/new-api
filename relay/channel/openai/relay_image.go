@@ -1,6 +1,8 @@
 package openai
 
 import (
+	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -18,6 +20,7 @@ import (
 	"github.com/QuantumNous/new-api/service"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"github.com/tidwall/gjson"
 	"github.com/tidwall/sjson"
 )
@@ -49,6 +52,8 @@ func OpenaiImageHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.
 		return nil, types.WithOpenAIError(*oaiError, resp.StatusCode)
 	}
 
+	responseBody = rewriteOpenAIImageBase64ToR2(c, responseBody)
+
 	updateOpenAIImageCount(info, gjson.GetBytes(responseBody, "data.#").Int())
 
 	// 写入新的 response body
@@ -57,6 +62,123 @@ func OpenaiImageHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.
 	normalizeOpenAIUsage(&usageResp.Usage)
 	applyUsagePostProcessing(info, &usageResp.Usage, responseBody)
 	return &usageResp.Usage, nil
+}
+
+// rewriteOpenAIImageBase64ToR2 replaces large inline image responses with
+// public R2 URLs. If R2 is not configured or an individual upload fails, the
+// original b64_json value is retained so the image request still succeeds.
+func rewriteOpenAIImageBase64ToR2(c *gin.Context, responseBody []byte) []byte {
+	store, err := common.NewR2StoreFromEnv()
+	if err != nil || store == nil {
+		return responseBody
+	}
+
+	imageCount := gjson.GetBytes(responseBody, "data.#").Int()
+	for index := int64(0); index < imageCount; index++ {
+		path := "data." + strconv.FormatInt(index, 10)
+		encoded := strings.TrimSpace(gjson.GetBytes(responseBody, path+".b64_json").String())
+		if encoded == "" {
+			continue
+		}
+		url, ok := uploadOpenAIImageBase64ToR2(c, store, encoded, gjson.GetBytes(responseBody, "output_format").String())
+		if !ok {
+			continue
+		}
+
+		updated, err := sjson.SetBytes(responseBody, path+".url", url)
+		if err != nil {
+			logger.LogWarn(c, fmt.Sprintf("failed to rewrite upstream image URL: %s", err.Error()))
+			continue
+		}
+		responseBody, err = sjson.DeleteBytes(updated, path+".b64_json")
+		if err != nil {
+			logger.LogWarn(c, fmt.Sprintf("failed to remove upstream image b64_json: %s", err.Error()))
+			continue
+		}
+	}
+	return responseBody
+}
+
+func uploadOpenAIImageBase64ToR2(c *gin.Context, store *common.R2Store, encoded, outputFormat string) (string, bool) {
+	contentType, payload, ok := decodeImageBase64(encoded, outputFormat)
+	if !ok {
+		logger.LogWarn(c, "failed to decode upstream image b64_json")
+		return "", false
+	}
+
+	key := common.R2DatePrefix(time.Now()) + uuid.NewString() + imageExtension(contentType)
+	if err := store.Put(c.Request.Context(), key, contentType, bytes.NewReader(payload), int64(len(payload))); err != nil {
+		logger.LogWarn(c, fmt.Sprintf("failed to upload upstream image to R2: %s", err.Error()))
+		return "", false
+	}
+	return store.URL(key), true
+}
+
+func rewriteOpenAIImageStreamBase64ToR2(c *gin.Context, event []byte) []byte {
+	encoded := strings.TrimSpace(gjson.GetBytes(event, "b64_json").String())
+	if encoded == "" {
+		return event
+	}
+	store, err := common.NewR2StoreFromEnv()
+	if err != nil || store == nil {
+		return event
+	}
+	url, ok := uploadOpenAIImageBase64ToR2(c, store, encoded, gjson.GetBytes(event, "output_format").String())
+	if !ok {
+		return event
+	}
+	updated, err := sjson.SetBytes(event, "url", url)
+	if err != nil {
+		return event
+	}
+	updated, err = sjson.DeleteBytes(updated, "b64_json")
+	if err != nil {
+		return event
+	}
+	return updated
+}
+
+func decodeImageBase64(encoded, outputFormat string) (string, []byte, bool) {
+	if strings.HasPrefix(encoded, "data:") {
+		parts := strings.SplitN(encoded, ",", 2)
+		if len(parts) != 2 || !strings.HasSuffix(parts[0], ";base64") {
+			return "", nil, false
+		}
+		encoded = parts[1]
+	}
+	payload, err := base64.StdEncoding.DecodeString(encoded)
+	if err != nil || len(payload) == 0 {
+		return "", nil, false
+	}
+	contentType := http.DetectContentType(payload)
+	if contentType != "image/png" && contentType != "image/jpeg" && contentType != "image/webp" {
+		return "", nil, false
+	}
+	if expected := imageContentType(outputFormat); outputFormat != "" && expected != contentType {
+		return "", nil, false
+	}
+	return contentType, payload, true
+}
+
+func imageContentType(outputFormat string) string {
+	switch strings.ToLower(strings.TrimSpace(outputFormat)) {
+	case "jpg", "jpeg":
+		return "image/jpeg"
+	case "webp":
+		return "image/webp"
+	default:
+		return "image/png"
+	}
+}
+
+func imageExtension(contentType string) string {
+	if contentType == "image/jpeg" {
+		return ".jpg"
+	}
+	if contentType == "image/webp" {
+		return ".webp"
+	}
+	return ".png"
 }
 
 // normalizeOpenAIUsage maps the OpenAI Images usage shape (input_tokens /
@@ -115,7 +237,6 @@ func OpenaiImageStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp 
 
 	helper.StreamScannerHandler(c, resp, info, func(data string, sr *helper.StreamResult) {
 		raw := common.StringToByteSlice(data)
-		lastStreamData = raw
 		if isOpenAIImageStreamErrorEvent(raw) {
 			// Record the error as a soft error; the scanner drives the final
 			// EndReason. HasErrors() flags the failure for logging/handling.
@@ -132,8 +253,10 @@ func OpenaiImageStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp 
 			}
 			if chunk.Type == "image_generation.completed" || chunk.Type == "image_edit.completed" {
 				completedImages++
+				raw = rewriteOpenAIImageStreamBase64ToR2(c, raw)
 			}
 		}
+		lastStreamData = raw
 		if err := writeOpenaiImageStreamChunk(c, raw); err != nil {
 			sr.Stop(err)
 		}
@@ -249,6 +372,7 @@ func openaiImageJSONAsStreamHandler(c *gin.Context, info *relaycommon.RelayInfo,
 	if oaiError := usageResp.GetOpenAIError(); oaiError != nil && oaiError.Type != "" {
 		return nil, types.WithOpenAIError(*oaiError, resp.StatusCode)
 	}
+	responseBody = rewriteOpenAIImageBase64ToR2(c, responseBody)
 	normalizeOpenAIUsage(&usageResp.Usage)
 	applyUsagePostProcessing(info, &usageResp.Usage, responseBody)
 

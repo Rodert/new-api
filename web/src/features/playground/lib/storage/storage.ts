@@ -146,6 +146,10 @@ type PlaygroundWorkspace = {
   }
 }
 
+// Large base64 image responses can exceed the browser's localStorage quota.
+// Keep the current session usable when persistence is unavailable.
+let volatileImageWorkspaceItems: ImageWorkspaceItem[] = []
+
 const TRUNCATED_CONTENT_SUFFIX = '\n\n[...]'
 const MIN_PREFIX_COLLAPSE_LENGTH = 2000
 const MIN_REPEATED_SECTION_COUNT = 3
@@ -691,10 +695,14 @@ export function loadImageWorkspaceResult(): ImageGenerationResponse | null {
 
 export function loadImageWorkspaceItems(): ImageWorkspaceItem[] {
   try {
-    return loadWorkspace().image.items
+    return [...volatileImageWorkspaceItems, ...loadWorkspace().image.items].slice(
+      0,
+      24
+    )
   } catch (error) {
     // eslint-disable-next-line no-console
     console.error('Failed to load image workspace items:', error)
+    return volatileImageWorkspaceItems.slice(0, 24)
   }
   return []
 }
@@ -703,9 +711,11 @@ export function saveImageWorkspaceResult(
   imageResult: ImageGenerationResponse | null,
   metadata?: ImageWorkspaceMetadata
 ): void {
+  let savedItem: ImageWorkspaceItem | undefined
   try {
     updateWorkspace((workspace) => {
       if (!imageResult) {
+        volatileImageWorkspaceItems = []
         return {
           ...workspace,
           image: { ...workspace.image, items: [] },
@@ -736,6 +746,7 @@ export function saveImageWorkspaceResult(
         referenceImages: metadata?.referenceImages,
         data: imageResult.data,
       }
+      savedItem = item
 
       return {
         ...workspace,
@@ -746,12 +757,21 @@ export function saveImageWorkspaceResult(
       }
     })
   } catch (error) {
+    if (savedItem) {
+      volatileImageWorkspaceItems = [
+        savedItem,
+        ...volatileImageWorkspaceItems,
+      ].slice(0, 24)
+    }
     // eslint-disable-next-line no-console
     console.error('Failed to save image workspace:', error)
   }
 }
 
 export function deleteImageWorkspaceItem(id: string): void {
+  volatileImageWorkspaceItems = volatileImageWorkspaceItems.filter(
+    (item) => item.id !== id
+  )
   updateWorkspace((workspace) => ({
     ...workspace,
     image: {
@@ -762,6 +782,7 @@ export function deleteImageWorkspaceItem(id: string): void {
 }
 
 export function clearImageWorkspaceItems(): void {
+  volatileImageWorkspaceItems = []
   updateWorkspace((workspace) => ({
     ...workspace,
     image: { ...workspace.image, items: [] },
@@ -910,6 +931,7 @@ export function savePlaygroundMode(mode: PlaygroundMode): void {
  * Clear all playground data
  */
 export function clearPlaygroundData(): void {
+  volatileImageWorkspaceItems = []
   try {
     localStorage.removeItem(STORAGE_KEYS.CONFIG)
     localStorage.removeItem(STORAGE_KEYS.PARAMETER_ENABLED)
