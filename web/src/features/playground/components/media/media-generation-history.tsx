@@ -20,6 +20,7 @@ import {
   DownloadIcon,
   ImageIcon,
   LoaderCircleIcon,
+  Maximize2Icon,
   PlayIcon,
   RefreshCwIcon,
   Trash2Icon,
@@ -195,22 +196,42 @@ function ImageGenerationCard(props: ImageGenerationCardProps) {
                   className='aspect-square w-full object-contain'
                   src={source}
                 />
-                <Tooltip>
-                  <TooltipTrigger
-                    render={
-                      <Button
-                        aria-label={t('Download')}
-                        className='bg-background/90 absolute right-2 bottom-2 shadow-sm'
-                        render={<a download href={source} />}
-                        size='icon-xs'
-                        variant='outline'
-                      >
-                        <DownloadIcon />
-                      </Button>
-                    }
-                  />
-                  <TooltipContent>{t('Download')}</TooltipContent>
-                </Tooltip>
+                <div className='absolute right-2 bottom-2 flex gap-1'>
+                  <Tooltip>
+                    <TooltipTrigger
+                      render={
+                        <Button
+                          aria-label={t('Open in new tab')}
+                          className='bg-background/90 shadow-sm'
+                          render={
+                            <a href={source} rel='noreferrer' target='_blank' />
+                          }
+                          size='icon-xs'
+                          variant='outline'
+                        >
+                          <Maximize2Icon />
+                        </Button>
+                      }
+                    />
+                    <TooltipContent>{t('Open in new tab')}</TooltipContent>
+                  </Tooltip>
+                  <Tooltip>
+                    <TooltipTrigger
+                      render={
+                        <Button
+                          aria-label={t('Download')}
+                          className='bg-background/90 shadow-sm'
+                          render={<a download href={source} />}
+                          size='icon-xs'
+                          variant='outline'
+                        >
+                          <DownloadIcon />
+                        </Button>
+                      }
+                    />
+                    <TooltipContent>{t('Download')}</TooltipContent>
+                  </Tooltip>
+                </div>
               </figure>
             )
           })}
