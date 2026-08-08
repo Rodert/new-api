@@ -44,4 +44,10 @@ docker compose -f docker-compose-shiyu.yml up -d
 
 日常发布：本地提交并推送 `shiyu-newapi`，等待 GitHub Actions 成功后，在服务器执行上面的两条命令。
 
+修改 R2 等环境变量后，重新创建容器：
+
+```bash
+docker compose -f docker-compose-shiyu.yml up -d --force-recreate new-api
+```
+
 回滚时，将应用镜像临时改为 Actions 生成的 `sha-<提交短 SHA>` 标签，再执行相同命令。
