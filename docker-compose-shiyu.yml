@@ -22,13 +22,12 @@ services:
       ERROR_LOG_ENABLED: "true"
       BATCH_UPDATE_ENABLED: "true"
       NODE_NAME: shiyu-newapi-node-1
-      # Optional: store temporary reference assets in Cloudflare R2.
-      # R2_ACCOUNT_ID: your-cloudflare-account-id
-      # R2_ACCESS_KEY_ID: your-r2-access-key-id
-      # R2_SECRET_ACCESS_KEY: your-r2-secret-access-key
-      # R2_BUCKET: api-silicogrove-com-bucket
-      # R2_PUBLIC_BASE_URL: https://file.lunadownload.com
-      # R2_ENDPOINT: https://your-cloudflare-account-id.r2.cloudflarestorage.com
+      R2_ACCOUNT_ID: ${R2_ACCOUNT_ID:-}
+      R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID:-}
+      R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY:-}
+      R2_BUCKET: ${R2_BUCKET:-}
+      R2_PUBLIC_BASE_URL: ${R2_PUBLIC_BASE_URL:-}
+      R2_ENDPOINT: ${R2_ENDPOINT:-}
     depends_on:
       redis:
         condition: service_healthy

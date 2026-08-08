@@ -35,6 +35,14 @@ ghcr.io/rodert/new-api:sha-<提交短 SHA>
 
 数据库和 Redis 不对外暴露端口；域名不是部署必需项。
 
+R2 等环境变量写在服务器同目录的 `.env` 文件中，不要直接写入 Compose 文件：
+
+```bash
+cp .env.example .env
+```
+
+然后编辑 `.env` 中的 R2 配置。
+
 首次启动或更新：
 
 ```bash
