@@ -62,7 +62,6 @@ func SetRelayRouter(router *gin.Engine) {
 
 	playgroundAssetRouter := router.Group("/pg/assets")
 	playgroundAssetRouter.Use(middleware.RouteTag("relay"))
-	playgroundAssetRouter.GET("/:asset_id", controller.PlaygroundAssetFetch)
 	playgroundAssetRouter.Use(middleware.SystemPerformanceCheck(), middleware.TokenOrUserAuth())
 	playgroundAssetRouter.POST("", middleware.UploadRateLimit(), controller.PlaygroundAssetUpload)
 

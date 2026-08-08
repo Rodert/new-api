@@ -1,12 +1,10 @@
 package controller
 
 import (
+	"context"
 	"fmt"
-	"io"
 	"mime/multipart"
 	"net/http"
-	"net/url"
-	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -18,37 +16,43 @@ import (
 	"github.com/google/uuid"
 )
 
+var (
+	playgroundR2Store *common.R2Store
+	playgroundR2Err   error
+)
+
 const (
-	playgroundAssetDirectory       = "/data/playground-assets"
-	playgroundAssetLifetime        = 24 * time.Hour
-	playgroundAssetCleanupInterval = time.Hour
-	maxImageAssetSize              = 20 << 20
-	maxVideoAssetSize              = 100 << 20
-	maxAudioAssetSize              = 20 << 20
+	maxImageAssetSize = 20 << 20
+	maxVideoAssetSize = 100 << 20
+	maxAudioAssetSize = 20 << 20
 )
 
 type playgroundAssetMetadata struct {
 	ContentType string `json:"content_type"`
-	ExpiresAt   int64  `json:"expires_at"`
 	Kind        string `json:"kind"`
 	Filename    string `json:"filename"`
 	Size        int64  `json:"size"`
 }
 
-// StartPlaygroundAssetCleanup keeps short-lived playground uploads from
-// accumulating in the persistent data volume.
-func StartPlaygroundAssetCleanup() {
-	go func() {
-		cleanupExpiredPlaygroundAssets(time.Now())
-		ticker := time.NewTicker(playgroundAssetCleanupInterval)
-		defer ticker.Stop()
-		for now := range ticker.C {
-			cleanupExpiredPlaygroundAssets(now)
-		}
-	}()
+func InitPlaygroundAssetStorage() {
+	store, err := common.NewR2StoreFromEnv()
+	switch {
+	case err != nil:
+		playgroundR2Err = err
+		common.SysError(fmt.Sprintf("R2 asset storage configuration error: %s", err.Error()))
+	case store == nil:
+		playgroundR2Err = fmt.Errorf("R2 asset storage is not configured")
+		common.SysError("R2 asset storage is not configured; playground asset uploads are disabled")
+	default:
+		playgroundR2Store = store
+	}
 }
 
 func PlaygroundAssetUpload(c *gin.Context) {
+	if playgroundR2Err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": playgroundR2Err.Error()})
+		return
+	}
 	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxVideoAssetSize+(1<<20))
 	kind := c.PostForm("kind")
 	file, err := c.FormFile("file")
@@ -75,24 +79,23 @@ func PlaygroundAssetUpload(c *gin.Context) {
 
 	assetID := uuid.NewString()
 	filename := filepath.Base(file.Filename)
-	if err := savePlaygroundAsset(assetID, file, playgroundAssetMetadata{
+	metadata := playgroundAssetMetadata{
 		ContentType: contentType,
-		ExpiresAt:   time.Now().Add(playgroundAssetLifetime).Unix(),
 		Kind:        kind,
 		Filename:    filename,
 		Size:        file.Size,
-	}); err != nil {
-		common.SysError(fmt.Sprintf("failed to save playground asset: %s", err.Error()))
+	}
+	key := common.R2DatePrefix(time.Now()) + assetID + safePlaygroundAssetExtension(filename)
+	if err := uploadPlaygroundAssetToR2(c.Request.Context(), file, metadata, key); err != nil {
+		common.SysError(fmt.Sprintf("failed to upload playground asset to R2: %s", err.Error()))
 		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "failed to save asset"})
 		return
 	}
-
-	baseURL := playgroundAssetBaseURL(c.Request)
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"data": gin.H{
 			"kind":         kind,
-			"url":          baseURL + "/pg/assets/" + assetID,
+			"url":          playgroundR2Store.URL(key),
 			"filename":     filename,
 			"content_type": contentType,
 			"size":         file.Size,
@@ -100,31 +103,13 @@ func PlaygroundAssetUpload(c *gin.Context) {
 	})
 }
 
-func PlaygroundAssetFetch(c *gin.Context) {
-	assetID := c.Param("asset_id")
-	if _, err := uuid.Parse(assetID); err != nil {
-		c.Status(http.StatusNotFound)
-		return
+func uploadPlaygroundAssetToR2(ctx context.Context, file *multipart.FileHeader, metadata playgroundAssetMetadata, key string) error {
+	source, err := file.Open()
+	if err != nil {
+		return err
 	}
-
-	metadata, err := loadPlaygroundAssetMetadata(assetID)
-	if err != nil || metadata.ExpiresAt <= time.Now().Unix() {
-		if metadata.ExpiresAt > 0 && metadata.ExpiresAt <= time.Now().Unix() {
-			removePlaygroundAssetFiles(assetID, metadata)
-			_ = os.Remove(playgroundAssetMetadataPath(assetID))
-		}
-		c.Status(http.StatusNotFound)
-		return
-	}
-
-	c.Header("Content-Type", metadata.ContentType)
-	c.Header("Cache-Control", "public, max-age=3600")
-	assetPath := playgroundAssetPath(assetID, metadata.Filename)
-	if _, statErr := os.Stat(assetPath); os.IsNotExist(statErr) {
-		// Fall back to assets created before filenames gained extensions.
-		assetPath = playgroundAssetPath(assetID)
-	}
-	http.ServeFile(c.Writer, c.Request, assetPath)
+	defer source.Close()
+	return playgroundR2Store.Put(ctx, key, metadata.ContentType, source, metadata.Size)
 }
 
 func playgroundAssetConstraints(kind string) (int64, map[string]bool, bool) {
@@ -155,65 +140,6 @@ func playgroundAssetConstraints(kind string) (int64, map[string]bool, bool) {
 	}
 }
 
-func savePlaygroundAsset(assetID string, file *multipart.FileHeader, metadata playgroundAssetMetadata) error {
-	if err := os.MkdirAll(playgroundAssetDirectory, 0o750); err != nil {
-		return err
-	}
-
-	source, err := file.Open()
-	if err != nil {
-		return err
-	}
-	defer source.Close()
-
-	assetPath := playgroundAssetPath(assetID, metadata.Filename)
-	destination, err := os.OpenFile(assetPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
-	if err != nil {
-		return err
-	}
-	_, copyErr := io.Copy(destination, source)
-	closeErr := destination.Close()
-	if copyErr != nil {
-		_ = os.Remove(assetPath)
-		return copyErr
-	}
-	if closeErr != nil {
-		_ = os.Remove(assetPath)
-		return closeErr
-	}
-
-	data, err := common.Marshal(metadata)
-	if err != nil {
-		_ = os.Remove(assetPath)
-		return err
-	}
-	if err := os.WriteFile(playgroundAssetMetadataPath(assetID), data, 0o600); err != nil {
-		_ = os.Remove(playgroundAssetPath(assetID))
-		return err
-	}
-	return nil
-}
-
-func loadPlaygroundAssetMetadata(assetID string) (playgroundAssetMetadata, error) {
-	data, err := os.ReadFile(playgroundAssetMetadataPath(assetID))
-	if err != nil {
-		return playgroundAssetMetadata{}, err
-	}
-	var metadata playgroundAssetMetadata
-	if err := common.Unmarshal(data, &metadata); err != nil {
-		return playgroundAssetMetadata{}, err
-	}
-	return metadata, nil
-}
-
-func playgroundAssetPath(assetID string, filename ...string) string {
-	name := assetID
-	if len(filename) > 0 {
-		name += safePlaygroundAssetExtension(filename[0])
-	}
-	return filepath.Join(playgroundAssetDirectory, name)
-}
-
 func safePlaygroundAssetExtension(filename string) string {
 	ext := filepath.Ext(filepath.Base(filename))
 	if len(ext) < 2 || len(ext) > 16 {
@@ -225,83 +151,4 @@ func safePlaygroundAssetExtension(filename string) string {
 		}
 	}
 	return strings.ToLower(ext)
-}
-
-func removePlaygroundAssetFiles(assetID string, metadata playgroundAssetMetadata) {
-	_ = os.Remove(playgroundAssetPath(assetID, metadata.Filename))
-	// Assets created before extensions were added used the bare UUID path.
-	_ = os.Remove(playgroundAssetPath(assetID))
-}
-
-func playgroundAssetMetadataPath(assetID string) string {
-	return playgroundAssetPath(assetID) + ".json"
-}
-
-func playgroundAssetBaseURL(request *http.Request) string {
-	scheme := "http"
-	if forwardedProto := request.Header.Get("X-Forwarded-Proto"); forwardedProto != "" {
-		scheme = strings.TrimSpace(strings.Split(forwardedProto, ",")[0])
-	} else if request.TLS != nil {
-		scheme = "https"
-	}
-	return (&url.URL{Scheme: scheme, Host: request.Host}).String()
-}
-
-func cleanupExpiredPlaygroundAssets(now time.Time) {
-	entries, err := os.ReadDir(playgroundAssetDirectory)
-	if err != nil {
-		if !os.IsNotExist(err) {
-			common.SysError(fmt.Sprintf("failed to read playground asset directory: %s", err.Error()))
-		}
-		return
-	}
-
-	for _, entry := range entries {
-		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".json") {
-			continue
-		}
-		assetID := strings.TrimSuffix(entry.Name(), ".json")
-		if _, err := uuid.Parse(assetID); err != nil {
-			continue
-		}
-
-		metadata, err := loadPlaygroundAssetMetadata(assetID)
-		if err == nil && metadata.ExpiresAt > now.Unix() {
-			continue
-		}
-		if err != nil {
-			info, infoErr := entry.Info()
-			if infoErr != nil || now.Sub(info.ModTime()) <= playgroundAssetLifetime {
-				continue
-			}
-		}
-
-		removePlaygroundAssetFiles(assetID, metadata)
-		if err := os.Remove(playgroundAssetMetadataPath(assetID)); err != nil && !os.IsNotExist(err) {
-			common.SysError(fmt.Sprintf("failed to remove expired playground asset: %s", err.Error()))
-			continue
-		}
-	}
-
-	for _, entry := range entries {
-		if entry.IsDir() || strings.HasSuffix(entry.Name(), ".json") {
-			continue
-		}
-		assetID := strings.SplitN(entry.Name(), ".", 2)[0]
-		if _, err := uuid.Parse(assetID); err != nil {
-			continue
-		}
-		if _, err := os.Stat(playgroundAssetMetadataPath(assetID)); err == nil {
-			continue
-		} else if !os.IsNotExist(err) {
-			continue
-		}
-		info, err := entry.Info()
-		if err != nil || now.Sub(info.ModTime()) <= playgroundAssetLifetime {
-			continue
-		}
-		if err := os.Remove(filepath.Join(playgroundAssetDirectory, entry.Name())); err != nil && !os.IsNotExist(err) {
-			common.SysError(fmt.Sprintf("failed to remove orphaned playground asset: %s", err.Error()))
-		}
-	}
 }

@@ -104,12 +104,10 @@ curl -X POST "https://ai.silicogrove.com/pg/assets" \
 
 ### 存储与清理
 
-- 文件和元数据保存在应用容器的 `/data/playground-assets/`，随 `/data` Docker volume 持久化。
-- 单个资源有效期为 24 小时。
-- 应用启动时清理一次，之后每小时扫描并删除过期资源及超过 24 小时的孤立残留文件。
-- `GET /pg/assets/{asset_id}` 不需要认证，因为视频上游需要自行下载该 URL。资源 ID 是不可预测 UUID，且会过期；不要把它当作长期私有文件存储。
+- 素材必须上传到 R2，并返回该自定义域名的公开 URL；对象键为 `temporary/YYYY/MM/DD/<uuid>.<ext>`。R2 对象的保留时间由 Bucket 的 Lifecycle Rule 控制，建议对 `temporary/` 前缀设置为 1 天。
+- `/pg/assets` 仅负责鉴权上传，返回的 R2 URL 直接供上游下载；R2 自定义域名不需要经过本站代理。
 
-本地的 `http://localhost:3002/pg/assets/...` 只能用于本地界面检查，外部视频上游无法访问。实际生成视频时，资源 URL 必须使用可从公网访问的线上域名。
+实际生成视频时，资源 URL 必须使用可从公网访问的 R2 自定义域名。
 
 ### 反向代理要求
 
@@ -122,7 +120,7 @@ proxy_set_header X-Forwarded-Proto $scheme;
 
 否则服务可能返回内部地址或 `http` URL，上游无法下载素材。Caddy 的常规 `reverse_proxy` 通常会自动保留这些信息。
 
-当前素材存储使用本地 `/data` volume，适用于单机 Compose 部署。若以后部署多个应用实例或多台机器，必须将 `/data/playground-assets` 改为共享存储，或改用对象存储；否则上传和上游下载可能被负载均衡分配到不同实例。
+R2 素材使用统一的公网自定义域名，适合多实例部署；所有实例必须使用同一个 R2 Bucket 和 `file.lunadownload.com` 域名。
 
 ## 4. 游乐场
 
