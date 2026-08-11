@@ -29,11 +29,19 @@
 
 ## 2. 对外 API
 
-站点 Base URL：
+首选 Base URL（用于日常调用和大流量请求）：
 
 ```text
 https://ai.silicogrove.com/v1
 ```
+
+备用 Base URL（首选域名不可用时手动切换）：
+
+```text
+https://api.silicogrove.com/v1
+```
+
+两个域名提供相同的 API 路径和认证方式。客户端不会自动切换域名，需要在调用方配置故障切换或手动替换 Base URL。
 
 认证统一使用用户在控制台创建的 API Key：
 
@@ -81,7 +89,7 @@ curl -X POST "https://ai.silicogrove.com/pg/assets" \
 
 | kind | 支持类型 | 单文件上限 |
 | --- | --- | --- |
-| `image` | jpeg、png、webp | 20 MiB |
+| `image` | jpeg、png、webp | 10 MiB |
 | `video` | mp4、webm、quicktime/mov | 100 MiB |
 | `audio` | aac、mpeg/mp3、mp4/m4a、ogg、wav、webm | 20 MiB |
 
@@ -92,7 +100,7 @@ curl -X POST "https://ai.silicogrove.com/pg/assets" \
   "success": true,
   "data": {
     "kind": "image",
-    "url": "https://ai.silicogrove.com/pg/assets/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
+    "url": "https://file.lunadownload.com/temporary/2026/08/11/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx.jpg",
     "filename": "reference.jpg",
     "content_type": "image/jpeg",
     "size": 123456
@@ -109,16 +117,9 @@ curl -X POST "https://ai.silicogrove.com/pg/assets" \
 
 实际生成视频时，资源 URL 必须使用可从公网访问的 R2 自定义域名。
 
-### 反向代理要求
+### R2 公网地址
 
-上传成功后的资源 URL 由收到请求时的域名和协议生成。HTTPS 在 Nginx 终止时，代理必须转发原始域名和协议：
-
-```nginx
-proxy_set_header Host $host;
-proxy_set_header X-Forwarded-Proto $scheme;
-```
-
-否则服务可能返回内部地址或 `http` URL，上游无法下载素材。Caddy 的常规 `reverse_proxy` 通常会自动保留这些信息。
+上传成功后的资源 URL 由 `R2_PUBLIC_BASE_URL` 生成，不使用收到上传请求时的主机名。生产环境应配置为 `https://file.lunadownload.com`。
 
 R2 素材使用统一的公网自定义域名，适合多实例部署；所有实例必须使用同一个 R2 Bucket 和 `file.lunadownload.com` 域名。
 
@@ -152,7 +153,7 @@ R2 素材使用统一的公网自定义域名，适合多实例部署；所有�
 docs/silicogrove-api-docs.html
 ```
 
-它的示例均使用 `https://ai.silicogrove.com`，覆盖文本、图片、视频、音频、素材上传和二次中转说明。该文件可直接打开预览；如需在生产站点提供 `https://ai.silicogrove.com/docs`，需由 Nginx/Caddy 配置静态文件路由，或后续接入前端路由。
+它的示例均优先使用 `https://ai.silicogrove.com`，并将 `https://api.silicogrove.com` 标记为备用域名，覆盖文本、图片、视频、音频、素材上传和二次中转说明。该文件可直接打开预览；如需在生产站点提供 `https://ai.silicogrove.com/docs`，需由 Nginx/Caddy 配置静态文件路由，或后续接入前端路由。
 
 ## 6. 本地验证和重启
 

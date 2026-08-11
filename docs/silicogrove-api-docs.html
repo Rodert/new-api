@@ -296,7 +296,7 @@
           <a class="nav-link" href="#chat">文本聊天</a>
           <a class="nav-link" href="#images">图片生成与编辑</a>
           <a class="nav-link" href="#videos">视频生成</a>
-          <a class="nav-link" href="#assets">上传视频素材</a>
+          <a class="nav-link" href="#assets">上传参考素材</a>
           <a class="nav-link" href="#audio">音频</a>
           <p class="nav-label">参考</p>
           <a class="nav-link" href="#errors">常见错误</a>
@@ -324,10 +324,11 @@
             <p class="eyebrow">SILICO GROVE API</p>
             <h1>给普通用户和二次中转用户的接入手册</h1>
             <p class="lead">照着复制即可接入文本、图片、视频和音频能力。不同功能需要使用对应的 endpoint，请保留原始字段名。</p>
-            <p class="endpoint">Base URL <code>https://ai.silicogrove.com/v1</code></p>
+            <p class="endpoint">首选 Base URL <code>https://ai.silicogrove.com/v1</code></p>
             <table>
               <thead><tr><th>项目</th><th>值</th></tr></thead>
               <tbody>
+                <tr><td>备用 Base URL</td><td><code>https://api.silicogrove.com/v1</code>，<span>首选域名不可用时切换</span></td></tr>
                 <tr><td>认证</td><td><code>Authorization: Bearer YOUR_API_KEY</code></td></tr>
                 <tr><td>JSON 请求</td><td><code>Content-Type: application/json</code></td></tr>
                 <tr><td>文件上传</td><td><code>multipart/form-data</code></td></tr>
@@ -342,7 +343,7 @@
               <div class="step"><span class="step-number">02</span><h3>查询可用模型</h3><p>使用同一个 Key 请求模型列表，确认权限。</p></div>
               <div class="step"><span class="step-number">03</span><h3>调用对应接口</h3><p>视频走视频接口，图片走图片接口，不要混用。</p></div>
             </div>
-            <div class="callout"><strong>Base URL 不要重复拼接。</strong>OpenAI SDK 的 <code>base_url</code> 填 <code>https://ai.silicogrove.com/v1</code>；自己拼完整路径时不要写成 <code>/v1/v1</code>。</div>
+            <div class="callout"><strong>Base URL 不要重复拼接。</strong><span>首选地址用于日常调用和大流量请求；备用地址需要由调用方配置故障切换。</span><br><span>OpenAI SDK 的 base_url 应包含 /v1，自行拼接完整路径时不要重复添加 /v1。</span></div>
 
             <h3>查询可用模型</h3>
             <div class="code-block"><div class="code-label">Shell</div><button class="copy-button" type="button">复制</button><pre><code>curl -X GET "https://ai.silicogrove.com/v1/models" \
@@ -482,6 +483,7 @@ print(response.choices[0].message.content)</code></pre></div>
                 <tr><td><code>audios</code></td><td>最多 1 个</td><td>mp3、m4a、wav、aac、ogg 的 URL 数组。</td></tr>
               </tbody>
             </table>
+            <p><span>以上参考素材数量限制适用于：</span> <code>video-ds-2.0</code>、<code>video-ds-2.0-fast</code> 和 <code>as-sd2.0-fast</code>；<span>其他视频模型的支持能力可能不同。</span></p>
 
             <h3>查询任务与下载视频</h3>
             <div class="code-block"><div class="code-label">Shell</div><button class="copy-button" type="button">复制</button><pre><code>curl -X GET "https://ai.silicogrove.com/v1/videos/TASK_ID" \
@@ -493,7 +495,7 @@ curl -L -X GET "https://ai.silicogrove.com/v1/videos/TASK_ID/content" \
           </section>
 
           <section id="assets">
-            <h2>上传视频素材</h2>
+            <h2>上传参考素材</h2>
             <p>本地图片、视频和音频可先上传到临时素材接口。上传成功后的 <code>data.url</code> 可直接放入视频请求中的 <code>images</code>、<code>videos</code> 或 <code>audios</code> 数组。</p>
             <div class="callout warning"><strong>临时素材会在 24 小时后自动删除。</strong>需要长期保留时，请使用自己的对象存储或 CDN URL。</div>
             <div class="code-block"><div class="code-label">Shell</div><button class="copy-button" type="button">复制</button><pre><code># 上传图片
@@ -518,7 +520,7 @@ curl -X POST "https://ai.silicogrove.com/pg/assets" \
   "success": true,
   "data": {
     "kind": "image",
-    "url": "https://ai.silicogrove.com/pg/assets/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
+    "url": "https://file.lunadownload.com/temporary/2026/08/11/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx.jpg",
     "filename": "ref.jpg",
     "content_type": "image/jpeg",
     "size": 123456
@@ -527,7 +529,7 @@ curl -X POST "https://ai.silicogrove.com/pg/assets" \
             <table>
               <thead><tr><th><code>kind</code></th><th>文件类型</th><th>单文件大小</th></tr></thead>
               <tbody>
-                <tr><td><code>image</code></td><td>jpg、png、webp</td><td>最多 20 MiB</td></tr>
+                <tr><td><code>image</code></td><td>jpg、png、webp</td><td>最多 10 MiB</td></tr>
                 <tr><td><code>video</code></td><td>mp4、mov、webm</td><td>最多 100 MiB</td></tr>
                 <tr><td><code>audio</code></td><td>mp3、m4a、wav、aac、ogg、webm</td><td>最多 20 MiB</td></tr>
               </tbody>
@@ -580,7 +582,8 @@ curl -X POST "https://ai.silicogrove.com/v1/audio/translations" \
           <section id="relay">
             <h2>二次中转注意事项</h2>
             <ul>
-              <li>上游地址填写 <code>https://ai.silicogrove.com</code> 或 <code>https://ai.silicogrove.com/v1</code>，取决于你的中转系统是否自动补全 <code>/v1</code>。</li>
+              <li>首选上游地址填写 <code>https://ai.silicogrove.com</code> 或 <code>https://ai.silicogrove.com/v1</code>，取决于你的中转系统是否自动补全 <code>/v1</code>。</li>
+              <li>备用地址为 <code>https://api.silicogrove.com</code> 或 <code>https://api.silicogrove.com/v1</code>；需要由中转系统配置故障切换，不会自动生效。</li>
               <li>使用 Silico Grove 的 API Key 同步 <code>/v1/models</code>，不要手填不存在的模型。</li>
               <li>视频模型 endpoint 必须为 <code>/v1/videos</code>，不要放入聊天模型池。</li>
               <li>转发视频请求时保留 JSON 原字段，尤其是 <code>images</code>、<code>videos</code>、<code>audios</code> 数组。</li>
@@ -609,21 +612,25 @@ curl -X POST "https://ai.silicogrove.com/v1/audio/translations" \
           texts: {
             'API 接入文档': 'API Documentation', '开始使用': 'GETTING STARTED', '概览': 'Overview', '快速接入': 'Quick start',
             '模型与权限': 'Models and access', '接口': 'API REFERENCE', '文本聊天': 'Text chat', '图片生成与编辑': 'Image generation and editing',
-            '视频生成': 'Video generation', '上传视频素材': 'Upload video assets', '音频': 'Audio', '参考': 'REFERENCE', '常见错误': 'Common errors',
+            '视频生成': 'Video generation', '上传参考素材': 'Upload reference assets', '音频': 'Audio', '参考': 'REFERENCE', '常见错误': 'Common errors',
             '二次中转': 'Relay integration', '开发者文档': 'Developer documentation', '打开控制台': 'Open console',
             '给普通用户和二次中转用户的接入手册': 'Integration guide for direct and relay users',
             '照着复制即可接入文本、图片、视频和音频能力。不同功能需要使用对应的 endpoint，请保留原始字段名。': 'Copy these examples to integrate text, image, video, and audio capabilities. Use the endpoint for each feature and preserve the original field names.',
-            '项目': 'Item', '值': 'Value', '认证': 'Authentication', 'JSON 请求': 'JSON request', '文件上传': 'File upload',
+            '项目': 'Item', '值': 'Value', '首选 Base URL': 'Primary Base URL', '备用 Base URL': 'Backup Base URL', '认证': 'Authentication', 'JSON 请求': 'JSON request', '文件上传': 'File upload',
+            '首选域名不可用时切换': 'Switch to it when the primary domain is unavailable',
             '创建 API Key': 'Create an API key', '在控制台创建并妥善保存自己的 Key。': 'Create your key in the console and store it securely.',
             '查询可用模型': 'List available models', '使用同一个 Key 请求模型列表，确认权限。': 'Use the same key to request the model list and verify access.',
             '调用对应接口': 'Call the matching endpoint', '视频走视频接口，图片走图片接口，不要混用。': 'Use video endpoints for video and image endpoints for images. Do not mix them.',
             'Base URL 不要重复拼接。': 'Do not duplicate the Base URL.', '最小文本测试': 'Minimal text test',
+            '首选地址用于日常调用和大流量请求；备用地址需要由调用方配置故障切换。': 'Use the primary address for normal and high-volume requests; configure failover to the backup address in your client.',
+            'OpenAI SDK 的 base_url 应包含 /v1，自行拼接完整路径时不要重复添加 /v1。': 'The OpenAI SDK base_url should include /v1. Do not append /v1 twice when constructing full paths.',
             '模型与权限': 'Models and access', '文本': 'Text', '图片': 'Images', '视频': 'Video',
             '场景': 'Use case', '常见模型示例': 'Typical model examples', '接口': 'Endpoint',
             'Chat Completions': 'Chat Completions', 'Responses API': 'Responses API', '图片生成': 'Image generation',
             '图片编辑，上传本地图片': 'Image editing with a local upload', '字段': 'Field', '说明': 'Description',
             '视频模型必须使用 ': 'Video models must use ', '最小文生视频示例': 'Minimal text-to-video example',
             '完整多媒体参考示例': 'Complete multimedia reference example', '参考素材必须是公网可访问 URL。': 'Reference assets must use publicly accessible URLs.',
+            '以上参考素材数量限制适用于：': 'The reference asset limits above apply to:', '其他视频模型的支持能力可能不同。': 'Other video models may support different capabilities.',
             '限制': 'Limit', '查询任务与下载视频': 'Retrieve a task and download video',
             '上传返回示例': 'Upload response example', '文件类型': 'File type', '单文件大小': 'Single-file size',
             '语音合成': 'Speech synthesis', '音频转写与翻译': 'Audio transcription and translation',
@@ -638,18 +645,22 @@ curl -X POST "https://ai.silicogrove.com/v1/audio/translations" \
           texts: {
             'API 接入文档': 'API ドキュメント', '开始使用': 'はじめに', '概览': '概要', '快速接入': 'クイックスタート',
             '模型与权限': 'モデルと権限', '接口': 'API リファレンス', '文本聊天': 'テキストチャット', '图片生成与编辑': '画像生成と編集',
-            '视频生成': '動画生成', '上传视频素材': '動画素材をアップロード', '音频': '音声', '参考': 'リファレンス', '常见错误': 'よくあるエラー',
+            '视频生成': '動画生成', '上传参考素材': '参照素材をアップロード', '音频': '音声', '参考': 'リファレンス', '常见错误': 'よくあるエラー',
             '二次中转': 'リレー統合', '开发者文档': '開発者ドキュメント', '打开控制台': 'コンソールを開く',
             '给普通用户和二次中转用户的接入手册': '直接利用者とリレー利用者向けの統合ガイド',
             '照着复制即可接入文本、图片、视频和音频能力。不同功能需要使用对应的 endpoint，请保留原始字段名。': 'この例をコピーして、テキスト、画像、動画、音声機能を統合できます。機能ごとに対応するエンドポイントを使用し、元のフィールド名を維持してください。',
-            '项目': '項目', '值': '値', '认证': '認証', 'JSON 请求': 'JSON リクエスト', '文件上传': 'ファイルアップロード',
+            '项目': '項目', '值': '値', '首选 Base URL': '優先 Base URL', '备用 Base URL': '予備 Base URL', '认证': '認証', 'JSON 请求': 'JSON リクエスト', '文件上传': 'ファイルアップロード',
+            '首选域名不可用时切换': '優先ドメインが利用できない場合に切り替えてください',
             '创建 API Key': 'API キーを作成', '在控制台创建并妥善保存自己的 Key。': 'コンソールでキーを作成し、安全に保管してください。',
             '查询可用模型': '利用可能なモデルを確認', '使用同一个 Key 请求模型列表，确认权限。': '同じキーでモデル一覧を取得し、権限を確認してください。',
             '调用对应接口': '対応するエンドポイントを呼び出す', '视频走视频接口，图片走图片接口，不要混用。': '動画には動画エンドポイント、画像には画像エンドポイントを使用してください。混在させないでください。',
             'Base URL 不要重复拼接。': 'Base URL を重複して連結しないでください。', '最小文本测试': '最小テキストテスト',
+            '首选地址用于日常调用和大流量请求；备用地址需要由调用方配置故障切换。': '通常時および大容量リクエストには優先アドレスを使用し、予備アドレスへの切り替えはクライアント側で設定してください。',
+            'OpenAI SDK 的 base_url 应包含 /v1，自行拼接完整路径时不要重复添加 /v1。': 'OpenAI SDK の base_url には /v1 を含め、完全なパスを組み立てる際に /v1 を重複して追加しないでください。',
             '文本': 'テキスト', '图片': '画像', '视频': '動画', '场景': '用途', '常见模型示例': '代表的なモデル例', '接口': 'エンドポイント',
             '图片生成': '画像生成', '图片编辑，上传本地图片': 'ローカル画像をアップロードして編集', '字段': 'フィールド', '说明': '説明',
             '最小文生视频示例': '最小テキスト動画生成例', '完整多媒体参考示例': '完全なマルチメディア参照例', '参考素材必须是公网可访问 URL。': '参照素材には公開アクセス可能な URL が必要です。',
+            '以上参考素材数量限制适用于：': '上記の参照素材数の制限は次のモデルに適用されます：', '其他视频模型的支持能力可能不同。': 'その他の動画モデルでは対応機能が異なる場合があります。',
             '限制': '制限', '查询任务与下载视频': 'タスクの確認と動画のダウンロード', '上传返回示例': 'アップロード応答例', '文件类型': 'ファイル形式', '单文件大小': 'ファイルあたりのサイズ',
             '语音合成': '音声合成', '音频转写与翻译': '音声の文字起こしと翻訳', '现象': '症状', '常见原因': '主な原因', '处理方式': '解決方法', '二次中转注意事项': 'リレー統合の注意事項', '复制': 'コピー', '已复制': 'コピー済み'
           }
@@ -661,18 +672,22 @@ curl -X POST "https://ai.silicogrove.com/v1/audio/translations" \
           texts: {
             'API 接入文档': 'Документация API', '开始使用': 'НАЧАЛО РАБОТЫ', '概览': 'Обзор', '快速接入': 'Быстрый старт',
             '模型与权限': 'Модели и доступ', '接口': 'СПРАВОЧНИК API', '文本聊天': 'Текстовый чат', '图片生成与编辑': 'Создание и редактирование изображений',
-            '视频生成': 'Создание видео', '上传视频素材': 'Загрузка видеоматериалов', '音频': 'Аудио', '参考': 'СПРАВКА', '常见错误': 'Типичные ошибки',
+            '视频生成': 'Создание видео', '上传参考素材': 'Загрузка референсных материалов', '音频': 'Аудио', '参考': 'СПРАВКА', '常见错误': 'Типичные ошибки',
             '二次中转': 'Интеграция через relay', '开发者文档': 'Документация для разработчиков', '打开控制台': 'Открыть консоль',
             '给普通用户和二次中转用户的接入手册': 'Руководство по интеграции для прямых пользователей и relay-сервисов',
             '照着复制即可接入文本、图片、视频和音频能力。不同功能需要使用对应的 endpoint，请保留原始字段名。': 'Скопируйте эти примеры, чтобы подключить текст, изображения, видео и аудио. Используйте endpoint, соответствующий функции, и сохраняйте исходные имена полей.',
-            '项目': 'Параметр', '值': 'Значение', '认证': 'Аутентификация', 'JSON 请求': 'JSON-запрос', '文件上传': 'Загрузка файла',
+            '项目': 'Параметр', '值': 'Значение', '首选 Base URL': 'Основной Base URL', '备用 Base URL': 'Резервный Base URL', '认证': 'Аутентификация', 'JSON 请求': 'JSON-запрос', '文件上传': 'Загрузка файла',
+            '首选域名不可用时切换': 'Используйте его, если основной домен недоступен',
             '创建 API Key': 'Создайте API-ключ', '在控制台创建并妥善保存自己的 Key。': 'Создайте ключ в консоли и надежно сохраните его.',
             '查询可用模型': 'Проверьте доступные модели', '使用同一个 Key 请求模型列表，确认权限。': 'Запросите список моделей тем же ключом, чтобы подтвердить доступ.',
             '调用对应接口': 'Вызовите нужный endpoint', '视频走视频接口，图片走图片接口，不要混用。': 'Используйте video endpoint для видео и image endpoint для изображений. Не смешивайте их.',
             'Base URL 不要重复拼接。': 'Не добавляйте Base URL повторно.', '最小文本测试': 'Минимальный текстовый тест',
+            '首选地址用于日常调用和大流量请求；备用地址需要由调用方配置故障切换。': 'Используйте основной адрес для обычных и высоконагруженных запросов; переключение на резервный адрес настраивается на стороне клиента.',
+            'OpenAI SDK 的 base_url 应包含 /v1，自行拼接完整路径时不要重复添加 /v1。': 'base_url для OpenAI SDK должен включать /v1. Не добавляйте /v1 повторно при формировании полного пути.',
             '文本': 'Текст', '图片': 'Изображения', '视频': 'Видео', '场景': 'Сценарий', '常见模型示例': 'Примеры моделей', '接口': 'Endpoint',
             '图片生成': 'Создание изображений', '图片编辑，上传本地图片': 'Редактирование с загрузкой локального изображения', '字段': 'Поле', '说明': 'Описание',
             '最小文生视频示例': 'Минимальный пример text-to-video', '完整多媒体参考示例': 'Полный пример с мультимедиа', '参考素材必须是公网可访问 URL。': 'Материалы должны быть доступны по публичному URL.',
+            '以上参考素材数量限制适用于：': 'Указанные ограничения на референсные материалы относятся к моделям:', '其他视频模型的支持能力可能不同。': 'Другие видеомодели могут поддерживать иной набор возможностей.',
             '限制': 'Ограничение', '查询任务与下载视频': 'Проверка задачи и скачивание видео', '上传返回示例': 'Пример ответа загрузки', '文件类型': 'Тип файла', '单文件大小': 'Размер одного файла',
             '语音合成': 'Синтез речи', '音频转写与翻译': 'Транскрибация и перевод аудио', '现象': 'Симптом', '常见原因': 'Вероятная причина', '处理方式': 'Решение', '二次中转注意事项': 'Примечания по relay-интеграции', '复制': 'Копировать', '已复制': 'Скопировано'
           }
