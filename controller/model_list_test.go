@@ -228,11 +228,16 @@ func TestGetUserModelsFiltersByPlaygroundMode(t *testing.T) {
 		{Id: 11, Type: constant.ChannelTypeOpenAI, Key: "chat-key", Status: common.ChannelStatusEnabled},
 		{Id: 12, Type: constant.ChannelTypeOpenAI, Key: "image-key", Status: common.ChannelStatusEnabled},
 		{Id: 13, Type: constant.ChannelTypeJimengZZVideo, Key: "video-key", Status: common.ChannelStatusEnabled},
+		{Id: 14, Type: constant.ChannelTypeGemini, Key: "gemini-key", Status: common.ChannelStatusEnabled},
+		{Id: 15, Type: constant.ChannelTypeXai, Key: "xai-key", Status: common.ChannelStatusEnabled},
 	}).Error)
 	require.NoError(t, db.Create(&[]model.Ability{
 		{Group: "default", Model: "gpt-4o", ChannelId: 11, Enabled: true},
 		{Group: "default", Model: "gpt-image-2", ChannelId: 12, Enabled: true},
 		{Group: "default", Model: "as-sd2.0-fast", ChannelId: 13, Enabled: true},
+		{Group: "default", Model: "gemini-3-pro-image", ChannelId: 14, Enabled: true},
+		{Group: "default", Model: "gemini-3.1-flash-image", ChannelId: 14, Enabled: true},
+		{Group: "default", Model: "grok-imagine-image", ChannelId: 15, Enabled: true},
 	}).Error)
 
 	for _, testCase := range []struct {
@@ -240,7 +245,12 @@ func TestGetUserModelsFiltersByPlaygroundMode(t *testing.T) {
 		models []string
 	}{
 		{mode: "chat", models: []string{"gpt-4o"}},
-		{mode: "image", models: []string{"gpt-image-2"}},
+		{mode: "image", models: []string{
+			"gpt-image-2",
+			"gemini-3-pro-image",
+			"gemini-3.1-flash-image",
+			"grok-imagine-image",
+		}},
 		{mode: "video", models: []string{"as-sd2.0-fast"}},
 	} {
 		recorder := httptest.NewRecorder()
