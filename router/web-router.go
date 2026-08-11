@@ -17,7 +17,6 @@ import (
 type WebAssets struct {
 	BuildFS   embed.FS
 	IndexPage []byte
-	DocsPage  []byte
 }
 
 func SetWebRouter(router *gin.Engine, assets WebAssets) {
@@ -27,7 +26,7 @@ func SetWebRouter(router *gin.Engine, assets WebAssets) {
 	router.Use(middleware.GlobalWebRateLimit())
 	router.Use(middleware.Cache())
 	router.GET("/docs/silicogrove-api-docs.html", func(c *gin.Context) {
-		c.Data(http.StatusOK, "text/html; charset=utf-8", assets.DocsPage)
+		c.Redirect(http.StatusTemporaryRedirect, "https://docs.silicogrove.com/")
 	})
 	router.Use(static.Serve("/", frontendFS))
 	router.NoRoute(func(c *gin.Context) {

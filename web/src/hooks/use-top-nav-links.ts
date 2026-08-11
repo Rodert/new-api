@@ -97,7 +97,7 @@ export function useTopNavLinks(): TopNavLink[] {
 
   links.push({
     title: t('API Documentation'),
-    href: '/docs/silicogrove-api-docs.html',
+    href: 'https://docs.silicogrove.com/',
     external: true,
   })
 
