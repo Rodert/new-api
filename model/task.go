@@ -120,6 +120,7 @@ type TaskBillingContext struct {
 	OtherRatios     map[string]float64 `json:"other_ratios,omitempty"`      // 附加倍率（时长、分辨率等）
 	OriginModelName string             `json:"origin_model_name,omitempty"` // 模型名称，必须为OriginModelName
 	PerCallBilling  bool               `json:"per_call_billing,omitempty"`  // 按次计费：跳过轮询阶段的差额结算
+	UsePrice        bool               `json:"use_price,omitempty"`         // 固定价格计费
 }
 
 // GetUpstreamTaskID 获取上游真实 task ID（用于与 provider 通信）
@@ -297,7 +298,8 @@ func TaskGetAllTasks(startIdx int, num int, queryParams SyncTaskQueryParams) []*
 
 func GetTimedOutUnfinishedTasks(cutoffUnix int64, limit int) []*Task {
 	var tasks []*Task
-	err := DB.Where("progress != ?", "100%").
+	err := DB.Where("platform != ?", constant.TaskPlatformImage).
+		Where("progress != ?", "100%").
 		Where("status NOT IN ?", []string{TaskStatusFailure, TaskStatusSuccess}).
 		Where("submit_time < ?", cutoffUnix).
 		Order("submit_time").
@@ -309,11 +311,21 @@ func GetTimedOutUnfinishedTasks(cutoffUnix int64, limit int) []*Task {
 	return tasks
 }
 
+func GetTimedOutImageTasks(cutoffUnix int64, limit int) []*Task {
+	var tasks []*Task
+	if err := DB.Where("platform = ? AND status = ?", constant.TaskPlatformImage, TaskStatusInProgress).
+		Where("start_time > 0 AND start_time < ?", cutoffUnix).
+		Order("id").Limit(limit).Find(&tasks).Error; err != nil {
+		return nil
+	}
+	return tasks
+}
+
 func GetAllUnFinishSyncTasks(limit int) []*Task {
 	var tasks []*Task
 	var err error
 	// get all tasks progress is not 100%
-	err = DB.Where("progress != ?", "100%").Where("status != ?", TaskStatusFailure).Where("status != ?", TaskStatusSuccess).Limit(limit).Order("id").Find(&tasks).Error
+	err = DB.Where("platform != ?", constant.TaskPlatformImage).Where("progress != ?", "100%").Where("status != ?", TaskStatusFailure).Where("status != ?", TaskStatusSuccess).Limit(limit).Order("id").Find(&tasks).Error
 	if err != nil {
 		return nil
 	}
@@ -327,12 +339,35 @@ func GetAllUnFinishSyncTasks(limit int) []*Task {
 func HasUnfinishedSyncTasks() bool {
 	var id int64
 	err := DB.Model(&Task{}).
+		Where("platform != ?", constant.TaskPlatformImage).
 		Where("progress != ?", "100%").
 		Where("status != ?", TaskStatusFailure).
 		Where("status != ?", TaskStatusSuccess).
 		Limit(1).
 		Pluck("id", &id).Error
 	return err == nil && id != 0
+}
+
+func HasPendingImageTasks() bool {
+	var id int64
+	err := DB.Model(&Task{}).
+		Where("platform = ?", constant.TaskPlatformImage).
+		Where("status = ? OR (status = ? AND start_time > 0 AND start_time < ?)", TaskStatusQueued, TaskStatusInProgress, time.Now().Unix()-int64(common.GetEnvOrDefault("ASYNC_IMAGE_TASK_TIMEOUT_MINUTES", 10))*60).
+		Limit(1).
+		Pluck("id", &id).Error
+	return err == nil && id != 0
+}
+
+func GetPendingImageTasks(limit int) []*Task {
+	if limit <= 0 {
+		limit = 1
+	}
+	var tasks []*Task
+	if err := DB.Where("platform = ? AND status = ?", constant.TaskPlatformImage, TaskStatusQueued).
+		Order("id").Limit(limit).Find(&tasks).Error; err != nil {
+		return nil
+	}
+	return tasks
 }
 
 func GetByTaskId(userId int, taskId string) (*Task, bool, error) {

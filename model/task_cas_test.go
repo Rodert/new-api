@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
 	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -90,6 +91,20 @@ func truncateTables(t *testing.T) {
 		DB.Exec("DELETE FROM system_task_locks")
 		DB.Exec("DELETE FROM system_tasks")
 	})
+}
+
+func TestVideoPollingQueriesExcludeImageTasks(t *testing.T) {
+	truncateTables(t)
+	video := &Task{TaskID: "task_video", Platform: "sora", Status: TaskStatusQueued, Progress: "0%"}
+	image := &Task{TaskID: "task_image", Platform: constant.TaskPlatformImage, Status: TaskStatusQueued, Progress: "0%"}
+	require.NoError(t, DB.Create(video).Error)
+	require.NoError(t, DB.Create(image).Error)
+
+	tasks := GetAllUnFinishSyncTasks(10)
+	require.Len(t, tasks, 1)
+	assert.Equal(t, "task_video", tasks[0].TaskID)
+	assert.True(t, HasUnfinishedSyncTasks())
+	assert.True(t, HasPendingImageTasks())
 }
 
 func insertTask(t *testing.T, task *Task) {

@@ -53,3 +53,16 @@ func TestRelayRouterRegistersPlaygroundImageRoutes(t *testing.T) {
 	require.True(t, routes["/pg/images/generations"])
 	require.True(t, routes["/pg/images/edits"])
 }
+
+func TestRelayRouterRegistersAsyncImageRoutes(t *testing.T) {
+	engine := gin.New()
+	SetRelayRouter(engine)
+
+	routes := make(map[string]bool)
+	for _, route := range engine.Routes() {
+		routes[route.Method+" "+route.Path] = true
+	}
+
+	require.True(t, routes[http.MethodPost+" /v1/images/tasks"])
+	require.True(t, routes[http.MethodGet+" /v1/images/tasks/:task_id"])
+}

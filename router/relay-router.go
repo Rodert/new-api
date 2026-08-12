@@ -94,6 +94,7 @@ func SetRelayRouter(router *gin.Engine) {
 	relayV1Router.Use(middleware.SystemPerformanceCheck())
 	relayV1Router.Use(middleware.TokenAuth())
 	relayV1Router.Use(middleware.ModelRequestRateLimit())
+	relayV1Router.GET("/images/tasks/:task_id", controller.GetImageTask)
 	{
 		// WebSocket 路由（统一到 Relay）
 		wsRouter := relayV1Router.Group("")
@@ -143,6 +144,7 @@ func SetRelayRouter(router *gin.Engine) {
 		httpRouter.POST("/images/edits", func(c *gin.Context) {
 			controller.Relay(c, types.RelayFormatOpenAIImage)
 		})
+		httpRouter.POST("/images/tasks", controller.CreateImageTask)
 
 		// embedding related routes
 		httpRouter.POST("/embeddings", func(c *gin.Context) {

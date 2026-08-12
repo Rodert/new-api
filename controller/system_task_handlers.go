@@ -22,6 +22,26 @@ func RegisterScheduledSystemTasks() {
 	service.RegisterSystemTaskHandler(modelUpdateHandler{})
 	service.RegisterSystemTaskHandler(midjourneyPollHandler{})
 	service.RegisterSystemTaskHandler(asyncTaskPollHandler{})
+	service.RegisterSystemTaskHandler(imageTaskRunHandler{})
+}
+
+type imageTaskRunHandler struct{}
+
+func (imageTaskRunHandler) Type() string { return model.SystemTaskTypeImageTaskRun }
+
+func (imageTaskRunHandler) Enabled() bool { return model.HasPendingImageTasks() }
+
+func (imageTaskRunHandler) Interval() time.Duration { return 15 * time.Second }
+
+func (imageTaskRunHandler) NewPayload() any { return nil }
+
+func (imageTaskRunHandler) Run(ctx context.Context, task *model.SystemTask, runnerID string) {
+	summary, err := runPendingImageTasks(ctx)
+	if err != nil {
+		finishSystemTaskHandler(task, runnerID, model.SystemTaskStatusFailed, summary, err)
+		return
+	}
+	finishSystemTaskHandler(task, runnerID, model.SystemTaskStatusSucceeded, summary, nil)
 }
 
 // channelTestHandler runs the scheduled "test all channels" job. Enablement and
