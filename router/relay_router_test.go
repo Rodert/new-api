@@ -65,4 +65,6 @@ func TestRelayRouterRegistersAsyncImageRoutes(t *testing.T) {
 
 	require.True(t, routes[http.MethodPost+" /v1/images/tasks"])
 	require.True(t, routes[http.MethodGet+" /v1/images/tasks/:task_id"])
+	require.True(t, routes[http.MethodPost+" /pg/images/tasks"])
+	require.True(t, routes[http.MethodGet+" /pg/images/tasks/:task_id"])
 }

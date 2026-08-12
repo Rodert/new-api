@@ -134,6 +134,21 @@ export interface ImageGenerationResponse {
   }>
 }
 
+export interface ImageTaskResponse {
+  id: string
+  object: 'image.task'
+  status: 'queued' | 'processing' | 'completed' | 'failed'
+  progress?: number
+  created_at?: number
+  started_at?: number
+  completed_at?: number
+  data?: ImageGenerationResponse['data']
+  error?: {
+    message?: string
+    type?: string
+  }
+}
+
 export interface VideoGenerationRequest {
   model: string
   group?: string

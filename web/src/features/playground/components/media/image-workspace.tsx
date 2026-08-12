@@ -24,7 +24,7 @@ import {
   UploadIcon,
   XIcon,
 } from 'lucide-react'
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
@@ -41,7 +41,7 @@ import {
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 
-import { editImage, generateImage, uploadPlaygroundAsset } from '../../api'
+import { createImageTask, getImageTask, uploadPlaygroundAsset } from '../../api'
 import {
   clearImageWorkspaceItems,
   deleteImageWorkspaceItem,
@@ -122,7 +122,15 @@ export function ImageWorkspace({
     loadImageWorkspaceItems
   )
   const [isGenerating, setIsGenerating] = useState(false)
+  const generationAbortRef = useRef<AbortController | null>(null)
   const isSingleImageModel = isGeminiImageModel(config.model)
+
+  useEffect(
+    () => () => {
+      generationAbortRef.current?.abort()
+    },
+    []
+  )
 
   const handleFiles = async (files: FileList | null) => {
     if (!files?.length) return
@@ -152,17 +160,47 @@ export function ImageWorkspace({
     metadata: ImageWorkspaceMetadata,
     images: File[] = []
   ) => {
+    generationAbortRef.current?.abort()
+    const abortController = new AbortController()
+    generationAbortRef.current = abortController
     setIsGenerating(true)
     try {
-      const response = images.length
-        ? await editImage(request, images)
-        : await generateImage(request)
-      saveImageWorkspaceResult(response, metadata)
+      let task = await createImageTask(request, images, abortController.signal)
+      while (task.status === 'queued' || task.status === 'processing') {
+        await new Promise<void>((resolve, reject) => {
+          const handleAbort = () => {
+            window.clearTimeout(timer)
+            reject(new DOMException('Aborted', 'AbortError'))
+          }
+          const timer = window.setTimeout(() => {
+            abortController.signal.removeEventListener('abort', handleAbort)
+            resolve()
+          }, 2000)
+          abortController.signal.addEventListener('abort', handleAbort, {
+            once: true,
+          })
+        })
+        task = await getImageTask(task.id, abortController.signal)
+      }
+      if (task.status === 'failed') {
+        throw new Error(task.error?.message || t('Request failed'))
+      }
+      if (task.status !== 'completed' || !Array.isArray(task.data)) {
+        throw new Error(t('Request failed'))
+      }
+      saveImageWorkspaceResult({ data: task.data }, metadata)
       setItems(loadImageWorkspaceItems())
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : t('Request failed'))
+      if (!abortController.signal.aborted) {
+        toast.error(
+          error instanceof Error ? error.message : t('Request failed')
+        )
+      }
     } finally {
-      setIsGenerating(false)
+      if (generationAbortRef.current === abortController) {
+        generationAbortRef.current = null
+        setIsGenerating(false)
+      }
     }
   }
 

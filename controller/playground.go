@@ -3,10 +3,12 @@ package controller
 import (
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/QuantumNous/new-api/middleware"
 	"github.com/QuantumNous/new-api/model"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	relayconstant "github.com/QuantumNous/new-api/relay/constant"
 	"github.com/QuantumNous/new-api/relaykit/types"
 
 	"github.com/gin-gonic/gin"
@@ -28,6 +30,21 @@ func PlaygroundImage(c *gin.Context) {
 	}
 
 	Relay(c, types.RelayFormatOpenAIImage)
+}
+
+func PlaygroundCreateImageTask(c *gin.Context) {
+	relayMode := relayconstant.RelayModeImagesGenerations
+	if strings.Contains(c.GetHeader("Content-Type"), "multipart/form-data") {
+		relayMode = relayconstant.RelayModeImagesEdits
+	}
+	c.Set("relay_mode", relayMode)
+
+	if newAPIError := preparePlaygroundRelay(c, types.RelayFormatOpenAIImage); newAPIError != nil {
+		c.JSON(newAPIError.StatusCode, gin.H{"error": newAPIError.ToOpenAIError()})
+		return
+	}
+
+	CreateImageTask(c)
 }
 
 func PlaygroundTask(c *gin.Context) {

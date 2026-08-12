@@ -24,7 +24,7 @@ import type {
   ChatCompletionRequest,
   ChatCompletionResponse,
   ImageGenerationRequest,
-  ImageGenerationResponse,
+  ImageTaskResponse,
   ModelOption,
   GroupOption,
   PlaygroundMode,
@@ -46,24 +46,29 @@ export async function sendChatCompletion(
   return res.data
 }
 
-export async function generateImage(
-  payload: ImageGenerationRequest
-): Promise<ImageGenerationResponse> {
-  const res = await api.post(API_ENDPOINTS.IMAGE_GENERATIONS, payload, {
+export async function createImageTask(
+  payload: ImageGenerationRequest,
+  images: File[] = [],
+  signal?: AbortSignal
+): Promise<ImageTaskResponse> {
+  const body = images.length
+    ? createImageEditFormData(payload, images)
+    : payload
+  const res = await api.post(API_ENDPOINTS.IMAGE_TASKS, body, {
+    signal,
     skipErrorHandler: true,
   } as Record<string, unknown>)
   return res.data
 }
 
-export async function editImage(
-  payload: ImageGenerationRequest,
-  images: File[]
-): Promise<ImageGenerationResponse> {
-  const res = await api.post(
-    API_ENDPOINTS.IMAGE_EDITS,
-    createImageEditFormData(payload, images),
-    { skipErrorHandler: true } as Record<string, unknown>
-  )
+export async function getImageTask(
+  taskId: string,
+  signal?: AbortSignal
+): Promise<ImageTaskResponse> {
+  const res = await api.get(`${API_ENDPOINTS.IMAGE_TASKS}/${taskId}`, {
+    signal,
+    skipErrorHandler: true,
+  } as Record<string, unknown>)
   return res.data
 }
 

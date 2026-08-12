@@ -78,12 +78,14 @@ func SetRelayRouter(router *gin.Engine) {
 		})
 		playgroundRouter.GET("/videos/:task_id/content", controller.VideoProxy)
 		playgroundRouter.HEAD("/videos/:task_id/content", controller.VideoProxy)
+		playgroundRouter.GET("/images/tasks/:task_id", controller.GetImageTask)
 
 		playgroundSubmitRouter := playgroundRouter.Group("")
 		playgroundSubmitRouter.Use(middleware.Distribute())
 		playgroundSubmitRouter.POST("/chat/completions", controller.Playground)
 		playgroundSubmitRouter.POST("/images/generations", controller.PlaygroundImage)
 		playgroundSubmitRouter.POST("/images/edits", controller.PlaygroundImage)
+		playgroundSubmitRouter.POST("/images/tasks", controller.PlaygroundCreateImageTask)
 		playgroundSubmitRouter.POST("/videos", func(c *gin.Context) {
 			c.Set("relay_mode", relayconstant.RelayModeVideoSubmit)
 			controller.PlaygroundTask(c)
