@@ -64,6 +64,25 @@ func TestGetRequestURLUsesGenerateContentForGeminiImageModel(t *testing.T) {
 	assert.Equal(t, "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-image:generateContent", requestURL)
 }
 
+func TestGeminiImageRequestHeaderUsesJSONAfterProtocolConversion(t *testing.T) {
+	t.Parallel()
+
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/images/edits", nil)
+	c.Request.Header.Set("Content-Type", "multipart/form-data; boundary=client-boundary")
+	info := &relaycommon.RelayInfo{
+		RelayMode: relayconstant.RelayModeImagesEdits,
+		ChannelMeta: &relaycommon.ChannelMeta{
+			ApiKey: "gemini-key",
+		},
+	}
+	header := make(http.Header)
+
+	require.NoError(t, (&Adaptor{}).SetupRequestHeader(c, &header, info))
+	assert.Equal(t, "application/json", header.Get("Content-Type"))
+	assert.Equal(t, "gemini-key", header.Get("x-goog-api-key"))
+}
+
 func TestConvertGeminiImageEditIncludesMultipartImage(t *testing.T) {
 	t.Parallel()
 

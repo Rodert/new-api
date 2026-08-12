@@ -2,6 +2,7 @@ package model_setting
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/setting/config"
@@ -108,8 +109,15 @@ func GetGeminiVersionSetting(key string) string {
 }
 
 func IsGeminiModelSupportImagine(model string) bool {
+	model = strings.TrimSpace(model)
+	if strings.HasPrefix(model, "gemini-") && strings.Contains(model, "-image") {
+		return true
+	}
+	if model == "gemini-2.0-flash-exp" {
+		return true
+	}
 	for _, v := range geminiSettings.SupportedImagineModels {
-		if v == model {
+		if strings.TrimSpace(v) == model {
 			return true
 		}
 	}

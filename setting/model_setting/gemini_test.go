@@ -97,3 +97,17 @@ func TestValidateGeminiSafetySettings(t *testing.T) {
 		assert.Error(t, ValidateGeminiSafetySettings(value), value)
 	}
 }
+
+func TestGeminiImageModelsRemainSupportedWithHistoricalSettings(t *testing.T) {
+	original := geminiSettings.SupportedImagineModels
+	t.Cleanup(func() {
+		geminiSettings.SupportedImagineModels = original
+	})
+	geminiSettings.SupportedImagineModels = []string{"gemini-2.0-flash-exp-image-generation"}
+
+	assert.True(t, IsGeminiModelSupportImagine("gemini-3-pro-image"))
+	assert.True(t, IsGeminiModelSupportImagine("gemini-3.1-flash-image"))
+	assert.True(t, IsGeminiModelSupportImagine("gemini-3.1-flash-image-preview"))
+	assert.True(t, IsGeminiModelSupportImagine("gemini-2.0-flash-exp"))
+	assert.False(t, IsGeminiModelSupportImagine("gemini-3.1-pro-preview"))
+}
