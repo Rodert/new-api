@@ -105,6 +105,17 @@ func RewriteOpenAIImageBase64ToR2(c *gin.Context, responseBody []byte) []byte {
 	return rewriteOpenAIImageBase64ToR2(c, responseBody)
 }
 
+// UploadImageBase64ToR2 stores an inline image and returns its public URL.
+// Providers that return image bytes in their native response can reuse the
+// same validation and storage path as OpenAI-compatible image responses.
+func UploadImageBase64ToR2(c *gin.Context, encoded, contentType string) (string, bool) {
+	store, err := common.NewR2StoreFromEnv()
+	if err != nil || store == nil {
+		return "", false
+	}
+	return uploadOpenAIImageBase64ToR2(c, store, encoded, imageOutputFormat(contentType))
+}
+
 func uploadOpenAIImageBase64ToR2(c *gin.Context, store *common.R2Store, encoded, outputFormat string) (string, bool) {
 	contentType, payload, ok := decodeImageBase64(encoded, outputFormat)
 	if !ok {
@@ -174,6 +185,17 @@ func imageContentType(outputFormat string) string {
 		return "image/webp"
 	default:
 		return "image/png"
+	}
+}
+
+func imageOutputFormat(contentType string) string {
+	switch strings.ToLower(strings.TrimSpace(contentType)) {
+	case "image/jpeg":
+		return "jpeg"
+	case "image/webp":
+		return "webp"
+	default:
+		return "png"
 	}
 }
 

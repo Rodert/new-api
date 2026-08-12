@@ -166,3 +166,45 @@ func TestGeminiGenerateContentImageHandlerReturnsOpenAIImageResponse(t *testing.
 	assert.Equal(t, "aW1hZ2U=", imageResponse.Data[0].B64Json)
 	assert.Empty(t, imageResponse.Data[0].Url)
 }
+
+func TestRewriteGeminiInlineImagesToURLsPreservesNativeResponseShape(t *testing.T) {
+	t.Parallel()
+
+	response := dto.GeminiChatResponse{Candidates: []dto.GeminiChatCandidate{{
+		Content: dto.GeminiChatContent{Parts: []dto.GeminiPart{
+			{Text: "generated image"},
+			{InlineData: &dto.GeminiInlineData{MimeType: "image/png", Data: "aW1hZ2U="}},
+		}},
+	}}}
+
+	changed := rewriteGeminiInlineImagesToURLs(&response, func(encoded, contentType string) (string, bool) {
+		assert.Equal(t, "aW1hZ2U=", encoded)
+		assert.Equal(t, "image/png", contentType)
+		return "https://file.lunadownload.com/temporary/2026/08/12/generated.png", true
+	})
+
+	require.True(t, changed)
+	parts := response.Candidates[0].Content.Parts
+	assert.Equal(t, "generated image", parts[0].Text)
+	assert.Nil(t, parts[1].InlineData)
+	require.NotNil(t, parts[1].FileData)
+	assert.Equal(t, "image/png", parts[1].FileData.MimeType)
+	assert.Equal(t, "https://file.lunadownload.com/temporary/2026/08/12/generated.png", parts[1].FileData.FileUri)
+}
+
+func TestRewriteGeminiInlineImagesToURLsKeepsInlineDataWhenUploadFails(t *testing.T) {
+	t.Parallel()
+
+	inlineData := &dto.GeminiInlineData{MimeType: "image/png", Data: "aW1hZ2U="}
+	response := dto.GeminiChatResponse{Candidates: []dto.GeminiChatCandidate{{
+		Content: dto.GeminiChatContent{Parts: []dto.GeminiPart{{InlineData: inlineData}}},
+	}}}
+
+	changed := rewriteGeminiInlineImagesToURLs(&response, func(string, string) (string, bool) {
+		return "", false
+	})
+
+	assert.False(t, changed)
+	assert.Same(t, inlineData, response.Candidates[0].Content.Parts[0].InlineData)
+	assert.Nil(t, response.Candidates[0].Content.Parts[0].FileData)
+}
