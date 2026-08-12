@@ -1,12 +1,14 @@
 package gemini
 
 import (
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"strings"
 
+	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/relay/channel"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relay/constant"
@@ -61,10 +63,6 @@ func (a *Adaptor) ConvertAudioRequest(c *gin.Context, info *relaycommon.RelayInf
 }
 
 func (a *Adaptor) ConvertImageRequest(c *gin.Context, info *relaycommon.RelayInfo, request dto.ImageRequest) (any, error) {
-	if !strings.HasPrefix(info.UpstreamModelName, "imagen") {
-		return nil, errors.New("not supported model for image generation, only imagen models are supported")
-	}
-
 	// convert size to aspect ratio but allow user to specify aspect ratio
 	aspectRatio := "1:1" // default aspect ratio
 	size := strings.TrimSpace(request.Size)
@@ -85,6 +83,81 @@ func (a *Adaptor) ConvertImageRequest(c *gin.Context, info *relaycommon.RelayInf
 				aspectRatio = "16:9"
 			}
 		}
+	}
+
+	if model_setting.IsGeminiModelSupportImagine(info.UpstreamModelName) {
+		if lo.FromPtrOr(request.N, uint(1)) != 1 {
+			return nil, errors.New("Gemini image generation supports exactly one image per request")
+		}
+
+		imageConfig := map[string]string{"aspectRatio": aspectRatio}
+		switch strings.ToLower(request.Quality) {
+		case "hd", "high", "2k":
+			imageConfig["imageSize"] = "2K"
+		case "4k":
+			imageConfig["imageSize"] = "4K"
+		case "fast", "standard", "medium", "low", "auto", "1k", "":
+			imageConfig["imageSize"] = "1K"
+		default:
+			imageConfig["imageSize"] = "1K"
+		}
+		imageConfigBytes, err := common.Marshal(imageConfig)
+		if err != nil {
+			return nil, fmt.Errorf("marshal Gemini image config: %w", err)
+		}
+
+		parts := []dto.GeminiPart{{Text: request.Prompt}}
+		if info.RelayMode == constant.RelayModeImagesEdits {
+			form := c.Request.MultipartForm
+			if form == nil {
+				form, err = common.ParseMultipartFormReusable(c)
+				if err != nil {
+					return nil, fmt.Errorf("parse Gemini image edit form: %w", err)
+				}
+			}
+			for fieldName, files := range form.File {
+				if fieldName != "image" && fieldName != "image[]" && !strings.HasPrefix(fieldName, "image[") {
+					continue
+				}
+				for _, fileHeader := range files {
+					file, err := fileHeader.Open()
+					if err != nil {
+						return nil, fmt.Errorf("open Gemini reference image: %w", err)
+					}
+					data, readErr := io.ReadAll(file)
+					closeErr := file.Close()
+					if readErr != nil {
+						return nil, fmt.Errorf("read Gemini reference image: %w", readErr)
+					}
+					if closeErr != nil {
+						return nil, fmt.Errorf("close Gemini reference image: %w", closeErr)
+					}
+					mimeType := fileHeader.Header.Get("Content-Type")
+					if mimeType == "" {
+						mimeType = http.DetectContentType(data)
+					}
+					parts = append(parts, dto.GeminiPart{InlineData: &dto.GeminiInlineData{
+						MimeType: mimeType,
+						Data:     base64.StdEncoding.EncodeToString(data),
+					}})
+				}
+			}
+			if len(parts) == 1 {
+				return nil, errors.New("Gemini image editing requires an image")
+			}
+		}
+
+		return dto.GeminiChatRequest{
+			Contents: []dto.GeminiChatContent{{Role: "user", Parts: parts}},
+			GenerationConfig: dto.GeminiChatGenerationConfig{
+				ResponseModalities: []string{"TEXT", "IMAGE"},
+				ImageConfig:        imageConfigBytes,
+			},
+		}, nil
+	}
+
+	if !strings.HasPrefix(info.UpstreamModelName, "imagen") {
+		return nil, errors.New("model does not support image generation")
 	}
 
 	// build gemini imagen request
@@ -271,6 +344,12 @@ func (a *Adaptor) DoResponse(c *gin.Context, resp *http.Response, info *relaycom
 			return GeminiTextGenerationStreamHandler(c, info, resp)
 		} else {
 			return GeminiTextGenerationHandler(c, info, resp)
+		}
+	}
+
+	if info.RelayMode == constant.RelayModeImagesGenerations || info.RelayMode == constant.RelayModeImagesEdits {
+		if model_setting.IsGeminiModelSupportImagine(info.UpstreamModelName) {
+			return GeminiGenerateContentImageHandler(c, info, resp)
 		}
 	}
 

@@ -99,6 +99,10 @@ const imageQuantityOptions = Array.from(
   value: String(value),
 }))
 
+const isGeminiImageModel = (model: string) =>
+  model === 'gemini-2.0-flash-exp' ||
+  (model.startsWith('gemini-') && model.includes('-image'))
+
 export function ImageWorkspace({
   config,
   groups,
@@ -118,6 +122,7 @@ export function ImageWorkspace({
     loadImageWorkspaceItems
   )
   const [isGenerating, setIsGenerating] = useState(false)
+  const isSingleImageModel = isGeminiImageModel(config.model)
 
   const handleFiles = async (files: FileList | null) => {
     if (!files?.length) return
@@ -174,12 +179,13 @@ export function ImageWorkspace({
       return
     }
     const referenceImages = references.map((reference) => reference.url)
+    const requestedQuantity = isSingleImageModel ? 1 : quantity
     await generate(
       {
         model: config.model,
         group: config.group,
         prompt: prompt.trim(),
-        n: quantity,
+        n: requestedQuantity,
         size,
         ...(quality !== 'auto' ? { quality } : {}),
       },
@@ -187,7 +193,7 @@ export function ImageWorkspace({
         aspectRatio,
         group: config.group,
         model: config.model,
-        n: quantity,
+        n: requestedQuantity,
         prompt: prompt.trim(),
         qualityPreset: quality,
         referenceImages,
@@ -224,12 +230,13 @@ export function ImageWorkspace({
       toast.error(t('Unable to read image'))
       return
     }
+    const requestedQuantity = isGeminiImageModel(item.model) ? 1 : item.n
     void generate(
       {
         model: item.model,
         group: item.group,
         prompt: item.prompt,
-        n: item.n,
+        n: requestedQuantity,
         size: itemSize,
         ...(item.qualityPreset !== 'auto'
           ? { quality: item.qualityPreset }
@@ -239,7 +246,7 @@ export function ImageWorkspace({
         aspectRatio: item.aspectRatio,
         group: item.group,
         model: item.model,
-        n: item.n,
+        n: requestedQuantity,
         prompt: item.prompt,
         qualityPreset: item.qualityPreset,
         referenceImages: item.referenceImages,
@@ -354,10 +361,10 @@ export function ImageWorkspace({
               <label className='text-muted-foreground grid gap-1.5 text-xs font-medium'>
                 {t('Quantity')}
                 <Select
-                  disabled={isGenerating}
+                  disabled={isGenerating || isSingleImageModel}
                   items={imageQuantityOptions}
                   onValueChange={(value) => setQuantity(Number(value))}
-                  value={String(quantity)}
+                  value={String(isSingleImageModel ? 1 : quantity)}
                 >
                   <SelectTrigger className='w-full'>
                     <SelectValue />

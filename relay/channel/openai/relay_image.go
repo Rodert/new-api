@@ -99,6 +99,12 @@ func rewriteOpenAIImageBase64ToR2(c *gin.Context, responseBody []byte) []byte {
 	return responseBody
 }
 
+// RewriteOpenAIImageBase64ToR2 lets compatible providers reuse the canonical
+// OpenAI Images response storage path after converting their response shape.
+func RewriteOpenAIImageBase64ToR2(c *gin.Context, responseBody []byte) []byte {
+	return rewriteOpenAIImageBase64ToR2(c, responseBody)
+}
+
 func uploadOpenAIImageBase64ToR2(c *gin.Context, store *common.R2Store, encoded, outputFormat string) (string, bool) {
 	contentType, payload, ok := decodeImageBase64(encoded, outputFormat)
 	if !ok {
