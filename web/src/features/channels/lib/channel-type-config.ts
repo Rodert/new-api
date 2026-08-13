@@ -181,7 +181,7 @@ export const CHANNEL_TYPE_CONFIGS: Record<number, ChannelTypeConfig> = {
     hints: {
       baseUrl: 'Default: https://api.119337.xyz',
       key: 'Grok Video API Key',
-      models: 'grok-image-video,grok-video-1.5,grok-video-1.5-1080p',
+      models: 'grok-image-video,grok-video-1.5',
     },
   },
 }
