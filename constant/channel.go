@@ -61,6 +61,7 @@ const (
 	ChannelTypeDummy          // number of built-in channel types
 	// Reserved for Shiyu custom channel types. This value is persisted in channel and task records.
 	ChannelTypeJimengZZVideo = 1000
+	ChannelTypeGrokVideo     = 1001
 )
 
 var ChannelBaseURLs = func() []string {
@@ -127,7 +128,7 @@ var ChannelBaseURLs = func() []string {
 		"",                                          //59
 		"",                                          //60
 	}
-	return append(baseURLs, make([]string, ChannelTypeJimengZZVideo-len(baseURLs)+1)...)
+	return append(baseURLs, make([]string, ChannelTypeGrokVideo-len(baseURLs)+1)...)
 }()
 
 var ChannelTypeNames = map[int]string{
@@ -189,6 +190,7 @@ var ChannelTypeNames = map[int]string{
 	ChannelTypeSub2API:        "Sub2API",
 	ChannelTypeNewAPI:         "New API",
 	ChannelTypeJimengZZVideo:  "JimengZZVideo",
+	ChannelTypeGrokVideo:      "GrokVideo",
 }
 
 func GetChannelTypeName(channelType int) string {

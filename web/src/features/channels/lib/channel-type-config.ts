@@ -174,6 +174,16 @@ export const CHANNEL_TYPE_CONFIGS: Record<number, ChannelTypeConfig> = {
       models: 'video-ds-2.0,video-ds-2.0-fast,as-sd2.0-fast',
     },
   },
+  1001: {
+    id: 1001,
+    name: CHANNEL_TYPES[1001],
+    icon: 'XAI',
+    hints: {
+      baseUrl: 'Default: https://api.119337.xyz',
+      key: 'Grok Video API Key',
+      models: 'grok-image-video,grok-video-1.5,grok-video-1.5-1080p',
+    },
+  },
 }
 
 /**

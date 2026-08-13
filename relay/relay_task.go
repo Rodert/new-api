@@ -435,7 +435,8 @@ func tryRealtimeFetch(task *model.Task, isOpenAIVideoAPI bool) []byte {
 	}
 	if channelModel.Type != constant.ChannelTypeVertexAi &&
 		channelModel.Type != constant.ChannelTypeGemini &&
-		channelModel.Type != constant.ChannelTypeJimengZZVideo {
+		channelModel.Type != constant.ChannelTypeJimengZZVideo &&
+		channelModel.Type != constant.ChannelTypeGrokVideo {
 		return nil
 	}
 

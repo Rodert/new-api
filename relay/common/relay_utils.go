@@ -223,8 +223,8 @@ func ValidateMultipartDirect(c *gin.Context, info *RelayInfo) *dto.TaskError {
 	if seconds == 0 {
 		seconds = req.Duration
 	}
-	if req.InputReference != "" {
-		req.Images = []string{req.InputReference}
+	if inputReference := req.GetInputReferenceURL(); inputReference != "" {
+		req.Images = []string{inputReference}
 	} else if len(req.Images) == 0 && strings.TrimSpace(req.Image) != "" {
 		// 兼容单图上传
 		req.Images = []string{strings.TrimSpace(req.Image)}
@@ -276,18 +276,21 @@ func ValidateMultipartDirect(c *gin.Context, info *RelayInfo) *dto.TaskError {
 
 func isKnownTaskField(field string) bool {
 	knownFields := map[string]bool{
-		"prompt":          true,
-		"model":           true,
-		"mode":            true,
-		"image":           true,
-		"images":          true,
-		"videos":          true,
-		"audios":          true,
-		"size":            true,
-		"aspect_ratio":    true,
-		"duration":        true,
-		"seconds":         true,
-		"input_reference": true, // Sora 特有字段
+		"prompt":           true,
+		"model":            true,
+		"mode":             true,
+		"image":            true,
+		"images":           true,
+		"videos":           true,
+		"audios":           true,
+		"size":             true,
+		"aspect_ratio":     true,
+		"duration":         true,
+		"seconds":          true,
+		"input_reference":  true, // Sora 特有字段
+		"image_urls":       true,
+		"reference_images": true,
+		"resolution":       true,
 	}
 	return knownFields[field]
 }

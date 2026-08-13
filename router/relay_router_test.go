@@ -27,7 +27,6 @@ func TestRelayRouterRegistersPlaygroundVideoContentRoute(t *testing.T) {
 			methods[route.Method] = true
 		}
 	}
-
 	require.True(t, methods[http.MethodGet])
 	require.True(t, methods[http.MethodHead])
 }
@@ -182,4 +181,5 @@ func setupRelayRouterTestDB(t *testing.T) {
 		} else {
 			require.NoError(t, os.Unsetenv("SQL_DSN"))
 		}
+	})
 }

@@ -36,7 +36,8 @@ func GetEndpointTypesByChannelType(channelType int, modelName string) []constant
 		constant.ChannelTypeVolcEngine,
 		constant.ChannelTypeSora,
 		constant.ChannelTypeMiniMax,
-		constant.ChannelTypeJimengZZVideo:
+		constant.ChannelTypeJimengZZVideo,
+		constant.ChannelTypeGrokVideo:
 		endpointTypes = []constant.EndpointType{constant.EndpointTypeOpenAIVideo}
 	case constant.ChannelTypeSub2API, constant.ChannelTypeNewAPI:
 		endpointTypes = []constant.EndpointType{

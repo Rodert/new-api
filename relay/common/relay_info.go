@@ -866,23 +866,37 @@ type TaskRelayInfo struct {
 }
 
 type TaskSubmitReq struct {
-	Prompt         string                 `json:"prompt"`
-	Model          string                 `json:"model,omitempty"`
-	Mode           string                 `json:"mode,omitempty"`
-	Image          string                 `json:"image,omitempty"`
-	Images         []string               `json:"images,omitempty"`
-	Videos         []string               `json:"videos,omitempty"`
-	Audios         []string               `json:"audios,omitempty"`
-	Size           string                 `json:"size,omitempty"`
-	AspectRatio    string                 `json:"aspect_ratio,omitempty"`
-	Duration       int                    `json:"duration,omitempty"`
-	Seconds        string                 `json:"seconds,omitempty"`
-	InputReference string                 `json:"input_reference,omitempty"`
-	Metadata       map[string]interface{} `json:"metadata,omitempty"`
+	Prompt          string                 `json:"prompt"`
+	Model           string                 `json:"model,omitempty"`
+	Mode            string                 `json:"mode,omitempty"`
+	Image           string                 `json:"image,omitempty"`
+	Images          []string               `json:"images,omitempty"`
+	ImageURLs       []string               `json:"image_urls,omitempty"`
+	ReferenceImages []string               `json:"reference_images,omitempty"`
+	Videos          []string               `json:"videos,omitempty"`
+	Audios          []string               `json:"audios,omitempty"`
+	Size            string                 `json:"size,omitempty"`
+	Resolution      string                 `json:"resolution,omitempty"`
+	AspectRatio     string                 `json:"aspect_ratio,omitempty"`
+	Duration        int                    `json:"duration,omitempty"`
+	Seconds         string                 `json:"seconds,omitempty"`
+	InputReference  any                    `json:"input_reference,omitempty"`
+	Metadata        map[string]interface{} `json:"metadata,omitempty"`
 }
 
 func (t *TaskSubmitReq) GetPrompt() string {
 	return t.Prompt
+}
+
+func (t *TaskSubmitReq) GetInputReferenceURL() string {
+	switch value := t.InputReference.(type) {
+	case string:
+		return value
+	case map[string]any:
+		imageURL, _ := value["image_url"].(string)
+		return imageURL
+	}
+	return ""
 }
 
 func (t *TaskSubmitReq) HasImage() bool {
