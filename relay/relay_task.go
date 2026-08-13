@@ -390,6 +390,9 @@ func videoFetchByIDRespBodyBuilder(c *gin.Context) (respBody []byte, taskResp *d
 
 	// Gemini/Vertex 支持实时查询：用户 fetch 时直接从上游拉取最新状态
 	if realtimeResp := tryRealtimeFetch(originTask, isOpenAIVideoAPI); len(realtimeResp) > 0 {
+		if c.GetBool("playground_flat_video_response") {
+			return playgroundVideoTaskResponse(originTask)
+		}
 		respBody = realtimeResp
 		return
 	}
@@ -413,6 +416,9 @@ func videoFetchByIDRespBodyBuilder(c *gin.Context) (respBody []byte, taskResp *d
 		taskResp = service.TaskErrorWrapperLocal(fmt.Errorf("not_implemented:%s", originTask.Platform), "not_implemented", http.StatusNotImplemented)
 		return
 	}
+	if c.GetBool("playground_flat_video_response") {
+		return playgroundVideoTaskResponse(originTask)
+	}
 
 	// 通用 TaskDto 格式
 	respBody, err = common.Marshal(dto.TaskResponse[any]{
@@ -423,6 +429,33 @@ func videoFetchByIDRespBodyBuilder(c *gin.Context) (respBody []byte, taskResp *d
 		taskResp = service.TaskErrorWrapper(err, "marshal_response_failed", http.StatusInternalServerError)
 	}
 	return
+}
+
+func playgroundVideoTaskResponse(task *model.Task) (respBody []byte, taskResp *dto.TaskError) {
+	status := "processing"
+	switch task.Status {
+	case model.TaskStatusQueued, model.TaskStatusSubmitted, model.TaskStatusNotStart:
+		status = "queued"
+	case model.TaskStatusSuccess:
+		status = "succeeded"
+	case model.TaskStatusFailure:
+		status = "failed"
+	}
+
+	response := dto.VideoTaskResponse{
+		TaskId: task.TaskID,
+		Status: status,
+		Url:    task.GetResultURL(),
+		Format: "mp4",
+	}
+	if task.Status == model.TaskStatusFailure {
+		response.Error = &dto.VideoTaskError{Message: task.FailReason}
+	}
+	respBody, err := common.Marshal(response)
+	if err != nil {
+		return nil, service.TaskErrorWrapper(err, "marshal_response_failed", http.StatusInternalServerError)
+	}
+	return respBody, nil
 }
 
 // tryRealtimeFetch attempts to retrieve the latest task state from providers

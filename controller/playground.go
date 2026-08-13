@@ -62,6 +62,9 @@ func PlaygroundTaskFetch(c *gin.Context) {
 		return
 	}
 
+	// The playground stores and polls the video task object directly, unlike
+	// public task APIs which use the generic TaskResponse envelope.
+	c.Set("playground_flat_video_response", true)
 	RelayTaskFetch(c)
 }
 
