@@ -275,7 +275,7 @@ func runPendingImageTasks(ctx context.Context) (imageTaskRunSummary, error) {
 		summary.Processed++
 		summary.Failed++
 	}
-	concurrency := common.GetEnvOrDefault("ASYNC_IMAGE_TASK_CONCURRENCY", 2)
+	concurrency := common.GetEnvOrDefault("ASYNC_IMAGE_TASK_CONCURRENCY", 4)
 	if concurrency < 1 {
 		concurrency = 1
 	} else if concurrency > 16 {
