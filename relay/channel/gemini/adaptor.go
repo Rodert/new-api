@@ -2,10 +2,13 @@ package gemini
 
 import (
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"mime"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
@@ -15,6 +18,7 @@ import (
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/relayconvert"
 	"github.com/QuantumNous/new-api/relaykit/types"
+	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting/model_setting"
 	"github.com/QuantumNous/new-api/setting/reasoning"
 
@@ -24,6 +28,8 @@ import (
 
 type Adaptor struct {
 }
+
+const maxGeminiReferenceImageSize = 10 << 20
 
 func (a *Adaptor) ConvertGeminiRequest(c *gin.Context, info *relaycommon.RelayInfo, request *dto.GeminiChatRequest) (any, error) {
 	if len(request.Contents) > 0 {
@@ -108,40 +114,11 @@ func (a *Adaptor) ConvertImageRequest(c *gin.Context, info *relaycommon.RelayInf
 
 		parts := []dto.GeminiPart{{Text: request.Prompt}}
 		if info.RelayMode == constant.RelayModeImagesEdits {
-			form := c.Request.MultipartForm
-			if form == nil {
-				form, err = common.ParseMultipartFormReusable(c)
-				if err != nil {
-					return nil, fmt.Errorf("parse Gemini image edit form: %w", err)
-				}
+			imageParts, imageErr := geminiEditImageParts(c, request)
+			if imageErr != nil {
+				return nil, imageErr
 			}
-			for fieldName, files := range form.File {
-				if fieldName != "image" && fieldName != "image[]" && !strings.HasPrefix(fieldName, "image[") {
-					continue
-				}
-				for _, fileHeader := range files {
-					file, err := fileHeader.Open()
-					if err != nil {
-						return nil, fmt.Errorf("open Gemini reference image: %w", err)
-					}
-					data, readErr := io.ReadAll(file)
-					closeErr := file.Close()
-					if readErr != nil {
-						return nil, fmt.Errorf("read Gemini reference image: %w", readErr)
-					}
-					if closeErr != nil {
-						return nil, fmt.Errorf("close Gemini reference image: %w", closeErr)
-					}
-					mimeType := fileHeader.Header.Get("Content-Type")
-					if mimeType == "" {
-						mimeType = http.DetectContentType(data)
-					}
-					parts = append(parts, dto.GeminiPart{InlineData: &dto.GeminiInlineData{
-						MimeType: mimeType,
-						Data:     base64.StdEncoding.EncodeToString(data),
-					}})
-				}
-			}
+			parts = append(parts, imageParts...)
 			if len(parts) == 1 {
 				return nil, errors.New("Gemini image editing requires an image")
 			}
@@ -197,6 +174,151 @@ func (a *Adaptor) ConvertImageRequest(c *gin.Context, info *relaycommon.RelayInf
 	}
 
 	return geminiRequest, nil
+}
+
+// geminiEditImageParts normalizes OpenAI image edit references into Gemini inlineData.
+// Multipart files remain supported; JSON requests accept HTTPS URLs and data URLs.
+func geminiEditImageParts(c *gin.Context, request dto.ImageRequest) ([]dto.GeminiPart, error) {
+	if len(request.Mask) > 0 {
+		return nil, errors.New("Gemini image editing does not support mask")
+	}
+	if strings.HasPrefix(c.GetHeader("Content-Type"), "application/json") {
+		return geminiJSONImageParts(c, request)
+	}
+
+	form := c.Request.MultipartForm
+	if form == nil {
+		var err error
+		form, err = common.ParseMultipartFormReusable(c)
+		if err != nil {
+			return nil, fmt.Errorf("parse Gemini image edit form: %w", err)
+		}
+	}
+	parts := make([]dto.GeminiPart, 0)
+	for fieldName, files := range form.File {
+		if fieldName != "image" && fieldName != "image[]" && !strings.HasPrefix(fieldName, "image[") {
+			continue
+		}
+		for _, fileHeader := range files {
+			file, err := fileHeader.Open()
+			if err != nil {
+				return nil, fmt.Errorf("open Gemini reference image: %w", err)
+			}
+			data, readErr := io.ReadAll(io.LimitReader(file, maxGeminiReferenceImageSize+1))
+			closeErr := file.Close()
+			if readErr != nil {
+				return nil, fmt.Errorf("read Gemini reference image: %w", readErr)
+			}
+			if closeErr != nil {
+				return nil, fmt.Errorf("close Gemini reference image: %w", closeErr)
+			}
+			part, err := geminiInlineImagePart(data, fileHeader.Header.Get("Content-Type"))
+			if err != nil {
+				return nil, err
+			}
+			parts = append(parts, part)
+		}
+	}
+	return parts, nil
+}
+
+func geminiJSONImageParts(c *gin.Context, request dto.ImageRequest) ([]dto.GeminiPart, error) {
+	sources := make([]string, 0)
+	for _, raw := range []json.RawMessage{request.Image, request.Images} {
+		if len(raw) == 0 {
+			continue
+		}
+		var one string
+		if err := common.Unmarshal(raw, &one); err == nil {
+			sources = append(sources, one)
+			continue
+		}
+		var many []string
+		if err := common.Unmarshal(raw, &many); err != nil {
+			return nil, errors.New("Gemini image editing requires image references as URL or data URL strings")
+		}
+		sources = append(sources, many...)
+	}
+
+	parts := make([]dto.GeminiPart, 0, len(sources))
+	for _, source := range sources {
+		part, err := geminiImageSourcePart(c, source)
+		if err != nil {
+			return nil, err
+		}
+		parts = append(parts, part)
+	}
+	return parts, nil
+}
+
+func geminiImageSourcePart(c *gin.Context, source string) (dto.GeminiPart, error) {
+	source = strings.TrimSpace(source)
+	if strings.HasPrefix(source, "data:") {
+		meta, encoded, ok := strings.Cut(source[5:], ",")
+		if !ok || !strings.HasSuffix(strings.ToLower(meta), ";base64") {
+			return dto.GeminiPart{}, errors.New("invalid image data URL")
+		}
+		if len(encoded) > base64.StdEncoding.EncodedLen(maxGeminiReferenceImageSize) {
+			return dto.GeminiPart{}, errors.New("Gemini image reference must be no larger than 10 MB")
+		}
+		data, err := base64.StdEncoding.DecodeString(encoded)
+		if err != nil {
+			return dto.GeminiPart{}, fmt.Errorf("decode image data URL: %w", err)
+		}
+		return geminiInlineImagePart(data, meta[:len(meta)-len(";base64")])
+	}
+
+	parsed, err := url.Parse(source)
+	if err != nil || parsed.Scheme != "https" || parsed.Host == "" {
+		return dto.GeminiPart{}, errors.New("Gemini image references must be HTTPS URLs or data URLs")
+	}
+	if err := service.ValidateSSRFProtectedFetchURL(source); err != nil {
+		return dto.GeminiPart{}, fmt.Errorf("invalid Gemini image reference URL: %w", err)
+	}
+	req, err := http.NewRequestWithContext(c.Request.Context(), http.MethodGet, source, nil)
+	if err != nil {
+		return dto.GeminiPart{}, err
+	}
+	resp, err := service.GetSSRFProtectedHTTPClient().Do(req)
+	if err != nil {
+		return dto.GeminiPart{}, fmt.Errorf("download Gemini image reference: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return dto.GeminiPart{}, fmt.Errorf("download Gemini image reference: status %d", resp.StatusCode)
+	}
+	data, err := io.ReadAll(io.LimitReader(resp.Body, maxGeminiReferenceImageSize+1))
+	if err != nil {
+		return dto.GeminiPart{}, fmt.Errorf("read Gemini image reference: %w", err)
+	}
+	return geminiInlineImagePart(data, resp.Header.Get("Content-Type"))
+}
+
+func geminiInlineImagePart(data []byte, contentType string) (dto.GeminiPart, error) {
+	if len(data) == 0 || len(data) > maxGeminiReferenceImageSize {
+		return dto.GeminiPart{}, errors.New("Gemini image reference must be no larger than 10 MB")
+	}
+	detectedContentType := http.DetectContentType(data)
+	if detectedContentType != "image/jpeg" && detectedContentType != "image/png" && detectedContentType != "image/webp" {
+		return dto.GeminiPart{}, errors.New("Gemini image reference content type is not supported")
+	}
+	if parsedContentType, _, err := mime.ParseMediaType(contentType); err == nil {
+		contentType = parsedContentType
+	}
+	if contentType == "" || contentType == "application/octet-stream" {
+		contentType = detectedContentType
+	}
+	contentType = strings.ToLower(contentType)
+	if contentType != "image/jpeg" && contentType != "image/png" && contentType != "image/webp" {
+		return dto.GeminiPart{}, errors.New("Gemini image reference content type is not supported")
+	}
+	if contentType != detectedContentType {
+		return dto.GeminiPart{}, errors.New("Gemini image reference content type does not match file content")
+	}
+	return dto.GeminiPart{InlineData: &dto.GeminiInlineData{
+		MimeType: contentType,
+		Data:     base64.StdEncoding.EncodeToString(data),
+	}}, nil
 }
 
 func (a *Adaptor) Init(info *relaycommon.RelayInfo) {

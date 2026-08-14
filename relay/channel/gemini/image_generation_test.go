@@ -92,7 +92,7 @@ func TestConvertGeminiImageEditIncludesMultipartImage(t *testing.T) {
 	require.NoError(t, writer.WriteField("prompt", "replace the sky"))
 	filePart, err := writer.CreateFormFile("image[]", "reference.png")
 	require.NoError(t, err)
-	imageBytes := []byte("not-a-real-png")
+	imageBytes := []byte{0x89, 'P', 'N', 'G', '\r', '\n', 0x1a, '\n'}
 	_, err = filePart.Write(imageBytes)
 	require.NoError(t, err)
 	require.NoError(t, writer.Close())
@@ -115,8 +115,38 @@ func TestConvertGeminiImageEditIncludesMultipartImage(t *testing.T) {
 	require.Len(t, payload.Contents[0].Parts, 2)
 	inlineData := payload.Contents[0].Parts[1].InlineData
 	require.NotNil(t, inlineData)
-	assert.Equal(t, "application/octet-stream", inlineData.MimeType)
-	assert.Equal(t, "bm90LWEtcmVhbC1wbmc=", inlineData.Data)
+	assert.Equal(t, "image/png", inlineData.MimeType)
+	assert.Equal(t, "iVBORw0KGgo=", inlineData.Data)
+}
+
+func TestConvertGeminiImageEditIncludesJSONReferences(t *testing.T) {
+	t.Parallel()
+
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/images/edits", nil)
+	c.Request.Header.Set("Content-Type", "application/json")
+	info := &relaycommon.RelayInfo{
+		RelayMode: relayconstant.RelayModeImagesEdits,
+		ChannelMeta: &relaycommon.ChannelMeta{
+			UpstreamModelName: "gemini-3.1-flash-image",
+		},
+	}
+	converted, err := (&Adaptor{}).ConvertImageRequest(c, info, dto.ImageRequest{
+		Prompt: "replace the sky",
+		Image:  []byte(`"data:image/png;base64,iVBORw0KGgo="`),
+		Images: []byte(`["data:image/png;base64,iVBORw0KGgo="]`),
+	})
+	require.NoError(t, err)
+	payload, ok := converted.(dto.GeminiChatRequest)
+	require.True(t, ok)
+	require.Len(t, payload.Contents[0].Parts, 3)
+	inlineData := payload.Contents[0].Parts[1].InlineData
+	require.NotNil(t, inlineData)
+	assert.Equal(t, "image/png", inlineData.MimeType)
+	assert.Equal(t, "iVBORw0KGgo=", inlineData.Data)
+	secondInlineData := payload.Contents[0].Parts[2].InlineData
+	require.NotNil(t, secondInlineData)
+	assert.Equal(t, "image/png", secondInlineData.MimeType)
 }
 
 func TestConvertGeminiImageRequestRejectsUnsupportedCountAndMissingEditImage(t *testing.T) {

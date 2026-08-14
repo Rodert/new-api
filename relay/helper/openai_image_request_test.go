@@ -123,6 +123,11 @@ func TestGetAndValidOpenAIImageRequestNBounds(t *testing.T) {
 			body:  `{"model":"gpt-image-1","prompt":"a cat"}`,
 			wantN: 1,
 		},
+		{
+			name:    "empty prompt is rejected",
+			body:    `{"model":"gpt-image-1","prompt":" "}`,
+			wantErr: "prompt is required",
+		},
 	}
 
 	for _, tt := range tests {
@@ -156,5 +161,19 @@ func TestGetAndValidOpenAIImageRequestNBounds(t *testing.T) {
 		_, err := GetAndValidOpenAIImageRequest(c, relayconstant.RelayModeImagesEdits)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), boundErr)
+	})
+
+	t.Run("multipart request requires model", func(t *testing.T) {
+		var body bytes.Buffer
+		writer := multipart.NewWriter(&body)
+		require.NoError(t, writer.WriteField("prompt", "edit this image"))
+		require.NoError(t, writer.Close())
+
+		c, _ := gin.CreateTestContext(httptest.NewRecorder())
+		c.Request = httptest.NewRequest(http.MethodPost, "/v1/images/edits", &body)
+		c.Request.Header.Set("Content-Type", writer.FormDataContentType())
+
+		_, err := GetAndValidOpenAIImageRequest(c, relayconstant.RelayModeImagesEdits)
+		require.EqualError(t, err, "model is required")
 	})
 }

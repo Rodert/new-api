@@ -246,11 +246,6 @@ func GetAndValidOpenAIImageRequest(c *gin.Context, relayMode int) (*dto.ImageReq
 			return nil, err
 		}
 
-		if imageRequest.Model == "" {
-			//imageRequest.Model = "dall-e-3"
-			return nil, errors.New("model is required")
-		}
-
 		if strings.Contains(imageRequest.Size, "×") {
 			return nil, errors.New("size an unexpected error occurred in the parameter, please use 'x' instead of the multiplication sign '×'")
 		}
@@ -290,6 +285,13 @@ func GetAndValidOpenAIImageRequest(c *gin.Context, relayMode int) (*dto.ImageReq
 		if imageRequest.N == nil || *imageRequest.N == 0 {
 			imageRequest.N = common.GetPointer(uint(1))
 		}
+	}
+
+	if strings.TrimSpace(imageRequest.Model) == "" {
+		return nil, errors.New("model is required")
+	}
+	if strings.TrimSpace(imageRequest.Prompt) == "" {
+		return nil, errors.New("prompt is required")
 	}
 
 	return imageRequest, nil
