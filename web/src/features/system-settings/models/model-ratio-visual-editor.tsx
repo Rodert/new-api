@@ -103,6 +103,17 @@ export type ModelRatioVisualEditorHandle = {
 
 const STORAGE_KEY = 'model-ratio-column-visibility'
 
+function parseVideoBillingModeMap(value: string): Record<string, string> {
+  const parsed = safeJsonParse<unknown>(value, {
+    fallback: {},
+    silent: true,
+  })
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    return {}
+  }
+  return parsed as Record<string, string>
+}
+
 const ModelRatioVisualEditorComponent = forwardRef<
   ModelRatioVisualEditorHandle,
   ModelRatioVisualEditorProps
@@ -389,10 +400,7 @@ const ModelRatioVisualEditorComponent = forwardRef<
         billingExpr,
         { fallback: {}, silent: true }
       )
-      const videoBillingModeMap = safeJsonParse<Record<string, string>>(
-        videoBillingMode,
-        { fallback: {}, silent: true }
-      )
+      const videoBillingModeMap = parseVideoBillingModeMap(videoBillingMode)
 
       delete priceMap[name]
       delete ratioMap[name]
@@ -536,10 +544,7 @@ const ModelRatioVisualEditorComponent = forwardRef<
         billingExpr,
         { fallback: {}, silent: true }
       )
-      const videoBillingModeMap = safeJsonParse<Record<string, string>>(
-        videoBillingMode,
-        { fallback: {}, silent: true }
-      )
+      const videoBillingModeMap = parseVideoBillingModeMap(videoBillingMode)
 
       const setIfPresent = (
         target: Record<string, number>,

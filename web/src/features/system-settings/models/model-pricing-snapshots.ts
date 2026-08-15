@@ -216,10 +216,16 @@ export const buildModelSnapshots = ({
     fallback: {},
     context: 'billing mode',
   })
-  const videoBillingModeMap = safeJsonParse<Record<string, string>>(
+  const parsedVideoBillingModeMap = safeJsonParse<Record<string, string>>(
     videoBillingMode,
     { fallback: {}, context: 'video billing mode' }
   )
+  const videoBillingModeMap: Record<string, string> =
+    parsedVideoBillingModeMap &&
+    typeof parsedVideoBillingModeMap === 'object' &&
+    !Array.isArray(parsedVideoBillingModeMap)
+      ? parsedVideoBillingModeMap
+      : {}
   const billingExprMap = safeJsonParse<Record<string, string>>(billingExpr, {
     fallback: {},
     context: 'billing expression',
