@@ -8,6 +8,7 @@ import (
 )
 
 func TestVideoBillingModeConfiguration(t *testing.T) {
+	assert.Equal(t, `{}`, VideoBillingMode2JSONString())
 	require.NoError(t, UpdateVideoBillingModeByJSONString(`{}`))
 	t.Cleanup(func() {
 		require.NoError(t, UpdateVideoBillingModeByJSONString(`{}`))
@@ -21,10 +22,17 @@ func TestVideoBillingModeConfiguration(t *testing.T) {
 }
 
 func TestVideoBillingModeRejectsUnsupportedValues(t *testing.T) {
+	require.NoError(t, UpdateVideoBillingModeByJSONString(`{"kling-video-v3":"per_second"}`))
+	t.Cleanup(func() {
+		require.NoError(t, UpdateVideoBillingModeByJSONString(`{}`))
+	})
+
 	for _, config := range []string{
+		`null`,
 		`{"kling-video-v3":"per_request"}`,
 		`{"":"per_second"}`,
 	} {
 		assert.Error(t, UpdateVideoBillingModeByJSONString(config))
 	}
+	assert.Equal(t, VideoBillingModePerSecond, GetVideoBillingMode("kling-video-v3"))
 }

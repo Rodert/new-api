@@ -12,21 +12,31 @@ const (
 	VideoBillingModePerSecond  = "per_second"
 )
 
-var videoBillingModeMap types.RWMap[string, string]
+var videoBillingModeMap = *types.NewRWMap[string, string]()
 
 func VideoBillingMode2JSONString() string {
 	return videoBillingModeMap.MarshalJSONString()
 }
 
-func UpdateVideoBillingModeByJSONString(jsonStr string) error {
+func ValidateVideoBillingModeJSONString(jsonStr string) error {
 	var modes map[string]string
 	if err := common.UnmarshalJsonStr(jsonStr, &modes); err != nil {
 		return err
+	}
+	if modes == nil {
+		return fmt.Errorf("video billing mode must be a JSON object")
 	}
 	for model, mode := range modes {
 		if model == "" || mode != VideoBillingModePerSecond {
 			return fmt.Errorf("video billing mode for %q must be %q", model, VideoBillingModePerSecond)
 		}
+	}
+	return nil
+}
+
+func UpdateVideoBillingModeByJSONString(jsonStr string) error {
+	if err := ValidateVideoBillingModeJSONString(jsonStr); err != nil {
+		return err
 	}
 	return types.LoadFromJsonStringWithCallback(&videoBillingModeMap, jsonStr, InvalidateExposedDataCache)
 }

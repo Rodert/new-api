@@ -107,7 +107,15 @@ function createJsonStringField(
 const createModelSchema = (t: Translate) =>
   z.object({
     ModelPrice: createJsonStringField(t),
-    VideoBillingMode: createJsonStringField(t),
+    VideoBillingMode: createJsonStringField(t, {
+      predicate: (value) =>
+        value !== null &&
+        typeof value === 'object' &&
+        !Array.isArray(value) &&
+        Object.entries(value).every(
+          ([model, mode]) => model !== '' && mode === 'per_second'
+        ),
+    }),
     ModelRatio: createJsonStringField(t),
     CacheRatio: createJsonStringField(t),
     CreateCacheRatio: createJsonStringField(t),
