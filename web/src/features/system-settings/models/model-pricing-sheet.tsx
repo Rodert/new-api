@@ -60,6 +60,13 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { cn } from '@/lib/utils'
 
@@ -170,6 +177,7 @@ export const ModelPricingEditorPanel = forwardRef<
       imageRatio: '',
       audioRatio: '',
       audioCompletionRatio: '',
+      videoBillingMode: 'per_request',
     },
   })
 
@@ -187,6 +195,7 @@ export const ModelPricingEditorPanel = forwardRef<
         imageRatio: editData.imageRatio || '',
         audioRatio: editData.audioRatio || '',
         audioCompletionRatio: editData.audioCompletionRatio || '',
+        videoBillingMode: editData.videoBillingMode || 'per_request',
       })
       setPricingMode(
         editData.billingMode === 'tiered_expr'
@@ -208,6 +217,7 @@ export const ModelPricingEditorPanel = forwardRef<
         imageRatio: '',
         audioRatio: '',
         audioCompletionRatio: '',
+        videoBillingMode: 'per_request',
       })
       setPricingMode('per-token')
       setBillingExpr('')
@@ -451,6 +461,7 @@ export const ModelPricingEditorPanel = forwardRef<
         imageRatio: values.imageRatio || '',
         audioRatio: values.audioRatio || '',
         audioCompletionRatio: values.audioCompletionRatio || '',
+        videoBillingMode: values.videoBillingMode || 'per_request',
       }
 
       if (pricingMode === 'tiered_expr') {
@@ -622,17 +633,61 @@ export const ModelPricingEditorPanel = forwardRef<
                                     }}
                                   />
                                   <InputGroupAddon align='inline-end'>
-                                    {t('per request')}
+                                    {t(
+                                      form.watch('videoBillingMode') ===
+                                        'per_second'
+                                        ? 'per second'
+                                        : 'per request'
+                                    )}
                                   </InputGroupAddon>
                                 </InputGroup>
                               </FormControl>
                               <FieldDescription>
-                                {t(
-                                  'Cost in USD per request, regardless of tokens used.'
-                                )}
+                                {form.watch('videoBillingMode') ===
+                                'per_second'
+                                  ? t('Cost in USD for each requested video second.')
+                                  : t(
+                                      'Cost in USD per request, regardless of tokens used.'
+                                    )}
                               </FieldDescription>
                               <FormMessage />
                             </Field>
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={form.control}
+                        name='videoBillingMode'
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>{t('Video billing')}</FormLabel>
+                            <Select
+                              value={field.value || 'per_request'}
+                              onValueChange={field.onChange}
+                            >
+                              <FormControl>
+                                <SelectTrigger className='w-full'>
+                                  <SelectValue />
+                                </SelectTrigger>
+                              </FormControl>
+                              <SelectContent>
+                                <SelectItem value='per_request'>
+                                  {t('Per-request')}
+                                </SelectItem>
+                                <SelectItem value='per_second'>
+                                  {t('Per-second')}
+                                </SelectItem>
+                              </SelectContent>
+                            </Select>
+                            <FormDescription>
+                              {field.value === 'per_second'
+                                ? t(
+                                    'The fixed price is charged for each requested video second.'
+                                  )
+                                : t(
+                                    'The fixed price is charged once for each video request.'
+                                  )}
+                            </FormDescription>
                           </FormItem>
                         )}
                       />

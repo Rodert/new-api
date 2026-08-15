@@ -23,6 +23,7 @@ import { formatPricingNumber } from './pricing-format'
 
 export type ModelPricingSnapshotInput = {
   modelPrice: string
+  videoBillingMode: string
   modelRatio: string
   cacheRatio: string
   createCacheRatio: string
@@ -47,6 +48,7 @@ export type ModelPricingSnapshot = {
   billingMode?: string
   billingExpr?: string
   requestRuleExpr?: string
+  videoBillingMode: 'per_request' | 'per_second'
   hasConflict: boolean
 }
 
@@ -113,7 +115,9 @@ export const getPriceSummary = (
     return getExpressionSummary(row, t)
   }
   if (row.billingMode === 'per-request') {
-    return row.price ? `$${row.price} / ${t('request')}` : t('Unset price')
+    if (!row.price) return t('Unset price')
+    const unit = row.videoBillingMode === 'per_second' ? 'second' : 'request'
+    return `$${row.price} / ${t(unit)}`
   }
 
   const inputPrice = ratioToPrice(row.ratio)
@@ -172,6 +176,7 @@ export const buildModelSnapshots = ({
   imageRatio,
   audioRatio,
   audioCompletionRatio,
+  videoBillingMode,
   billingMode,
   billingExpr,
 }: ModelPricingSnapshotInput): ModelPricingSnapshot[] => {
@@ -211,6 +216,10 @@ export const buildModelSnapshots = ({
     fallback: {},
     context: 'billing mode',
   })
+  const videoBillingModeMap = safeJsonParse<Record<string, string>>(
+    videoBillingMode,
+    { fallback: {}, context: 'video billing mode' }
+  )
   const billingExprMap = safeJsonParse<Record<string, string>>(billingExpr, {
     fallback: {},
     context: 'billing expression',
@@ -227,6 +236,7 @@ export const buildModelSnapshots = ({
     ...Object.keys(audioCompletionMap),
     ...Object.keys(billingModeMap),
     ...Object.keys(billingExprMap),
+    ...Object.keys(videoBillingModeMap),
   ])
 
   return Array.from(modelNames).map((name) => {
@@ -240,6 +250,8 @@ export const buildModelSnapshots = ({
     const audioCompletion = audioCompletionMap[name]?.toString() || ''
 
     const modeForModel = billingModeMap[name]
+    const videoMode =
+      videoBillingModeMap[name] === 'per_second' ? 'per_second' : 'per_request'
     if (modeForModel === 'tiered_expr') {
       const fullExpr = billingExprMap[name] || ''
       const { billingExpr: pureExpr, requestRuleExpr } =
@@ -249,6 +261,7 @@ export const buildModelSnapshots = ({
         billingMode: 'tiered_expr',
         billingExpr: pureExpr,
         requestRuleExpr,
+        videoBillingMode: videoMode,
         price,
         ratio,
         cacheRatio: cache,
@@ -272,6 +285,7 @@ export const buildModelSnapshots = ({
       audioRatio: audio,
       audioCompletionRatio: audioCompletion,
       billingMode: price !== '' ? 'per-request' : 'per-token',
+      videoBillingMode: videoMode,
       hasConflict:
         price !== '' &&
         (ratio !== '' ||
@@ -299,5 +313,6 @@ export const getSnapshotSignature = (snapshot?: ModelPricingSnapshot) => {
     billingMode: snapshot.billingMode || 'per-token',
     billingExpr: snapshot.billingExpr || '',
     requestRuleExpr: snapshot.requestRuleExpr || '',
+    videoBillingMode: snapshot.videoBillingMode || 'per_request',
   })
 }

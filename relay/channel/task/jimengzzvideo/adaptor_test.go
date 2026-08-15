@@ -10,6 +10,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	"github.com/QuantumNous/new-api/setting/ratio_setting"
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
@@ -117,4 +118,19 @@ func TestValidateRequestRejectsNonPublicMediaURL(t *testing.T) {
 	taskErr := (&TaskAdaptor{}).ValidateRequestAndSetAction(ctx, &relaycommon.RelayInfo{TaskRelayInfo: &relaycommon.TaskRelayInfo{}})
 	require.NotNil(t, taskErr)
 	assert.Equal(t, "invalid_media_url", taskErr.Code)
+}
+
+func TestEstimateBillingUsesSecondsOnlyForPerSecondModels(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	ctx.Set("task_request", relaycommon.TaskSubmitReq{Seconds: "15"})
+	adaptor := &TaskAdaptor{}
+
+	require.NoError(t, ratio_setting.UpdateVideoBillingModeByJSONString(`{"kling-video-v3":"per_second"}`))
+	t.Cleanup(func() {
+		require.NoError(t, ratio_setting.UpdateVideoBillingModeByJSONString(`{}`))
+	})
+
+	assert.Equal(t, map[string]float64{"seconds": 15}, adaptor.EstimateBilling(ctx, &relaycommon.RelayInfo{OriginModelName: "kling-video-v3"}))
+	assert.Nil(t, adaptor.EstimateBilling(ctx, &relaycommon.RelayInfo{OriginModelName: "video-ds-2.0"}))
 }

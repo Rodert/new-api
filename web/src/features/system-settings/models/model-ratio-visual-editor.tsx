@@ -68,6 +68,7 @@ import { buildModelRatioColumns } from './model-ratio-table-columns'
 
 type ModelRatioVisualEditorProps = {
   savedModelPrice: string
+  savedVideoBillingMode: string
   savedModelRatio: string
   savedCacheRatio: string
   savedCreateCacheRatio: string
@@ -78,6 +79,7 @@ type ModelRatioVisualEditorProps = {
   savedBillingMode: string
   savedBillingExpr: string
   modelPrice: string
+  videoBillingMode: string
   modelRatio: string
   cacheRatio: string
   createCacheRatio: string
@@ -107,6 +109,7 @@ const ModelRatioVisualEditorComponent = forwardRef<
 >(function ModelRatioVisualEditor(
   {
     savedModelPrice,
+    savedVideoBillingMode,
     savedModelRatio,
     savedCacheRatio,
     savedCreateCacheRatio,
@@ -117,6 +120,7 @@ const ModelRatioVisualEditorComponent = forwardRef<
     savedBillingMode,
     savedBillingExpr,
     modelPrice,
+    videoBillingMode,
     modelRatio,
     cacheRatio,
     createCacheRatio,
@@ -191,6 +195,7 @@ const ModelRatioVisualEditorComponent = forwardRef<
   const models = useMemo(() => {
     const savedRows = buildModelSnapshots({
       modelPrice: savedModelPrice,
+      videoBillingMode: savedVideoBillingMode,
       modelRatio: savedModelRatio,
       cacheRatio: savedCacheRatio,
       createCacheRatio: savedCreateCacheRatio,
@@ -203,6 +208,7 @@ const ModelRatioVisualEditorComponent = forwardRef<
     })
     const draftRows = buildModelSnapshots({
       modelPrice,
+      videoBillingMode,
       modelRatio,
       cacheRatio,
       createCacheRatio,
@@ -246,6 +252,7 @@ const ModelRatioVisualEditorComponent = forwardRef<
     candidateModelNames,
     filterMode,
     savedModelPrice,
+    savedVideoBillingMode,
     savedModelRatio,
     savedCacheRatio,
     savedCreateCacheRatio,
@@ -256,6 +263,7 @@ const ModelRatioVisualEditorComponent = forwardRef<
     savedBillingMode,
     savedBillingExpr,
     modelPrice,
+    videoBillingMode,
     modelRatio,
     cacheRatio,
     createCacheRatio,
@@ -310,6 +318,7 @@ const ModelRatioVisualEditorComponent = forwardRef<
         billingMode: editBillingMode,
         billingExpr: editableModel.billingExpr,
         requestRuleExpr: editableModel.requestRuleExpr,
+        videoBillingMode: editableModel.videoBillingMode,
       })
       setEditorOpen(true)
       if (isMobile) setSheetOpen(true)
@@ -380,6 +389,10 @@ const ModelRatioVisualEditorComponent = forwardRef<
         billingExpr,
         { fallback: {}, silent: true }
       )
+      const videoBillingModeMap = safeJsonParse<Record<string, string>>(
+        videoBillingMode,
+        { fallback: {}, silent: true }
+      )
 
       delete priceMap[name]
       delete ratioMap[name]
@@ -391,6 +404,7 @@ const ModelRatioVisualEditorComponent = forwardRef<
       delete audioCompletionMap[name]
       delete billingModeMap[name]
       delete billingExprMap[name]
+      delete videoBillingModeMap[name]
 
       onChange('ModelPrice', JSON.stringify(priceMap, null, 2))
       onChange('ModelRatio', JSON.stringify(ratioMap, null, 2))
@@ -411,6 +425,7 @@ const ModelRatioVisualEditorComponent = forwardRef<
         'billing_setting.billing_expr',
         JSON.stringify(billingExprMap, null, 2)
       )
+      onChange('VideoBillingMode', JSON.stringify(videoBillingModeMap, null, 2))
 
       if (editData?.name === name) {
         setEditData(null)
@@ -429,6 +444,7 @@ const ModelRatioVisualEditorComponent = forwardRef<
       audioCompletionRatio,
       billingMode,
       billingExpr,
+      videoBillingMode,
       onChange,
       editData,
     ]
@@ -520,6 +536,10 @@ const ModelRatioVisualEditorComponent = forwardRef<
         billingExpr,
         { fallback: {}, silent: true }
       )
+      const videoBillingModeMap = safeJsonParse<Record<string, string>>(
+        videoBillingMode,
+        { fallback: {}, silent: true }
+      )
 
       const setIfPresent = (
         target: Record<string, number>,
@@ -542,6 +562,7 @@ const ModelRatioVisualEditorComponent = forwardRef<
         delete audioCompletionMap[name]
         delete billingModeMap[name]
         delete billingExprMap[name]
+        delete videoBillingModeMap[name]
 
         if (data.billingMode === 'tiered_expr') {
           const combined = combineBillingExpr(
@@ -566,6 +587,9 @@ const ModelRatioVisualEditorComponent = forwardRef<
           setIfPresent(audioCompletionMap, name, data.audioCompletionRatio)
         } else if (data.price && data.price !== '') {
           setIfPresent(priceMap, name, data.price)
+          if (data.videoBillingMode === 'per_second') {
+            videoBillingModeMap[name] = 'per_second'
+          }
         } else {
           setIfPresent(ratioMap, name, data.ratio)
           setIfPresent(cacheMap, name, data.cacheRatio)
@@ -596,6 +620,7 @@ const ModelRatioVisualEditorComponent = forwardRef<
         'billing_setting.billing_expr',
         JSON.stringify(billingExprMap, null, 2)
       )
+      onChange('VideoBillingMode', JSON.stringify(videoBillingModeMap, null, 2))
     },
     [
       modelPrice,
@@ -608,6 +633,7 @@ const ModelRatioVisualEditorComponent = forwardRef<
       audioCompletionRatio,
       billingMode,
       billingExpr,
+      videoBillingMode,
       onChange,
     ]
   )

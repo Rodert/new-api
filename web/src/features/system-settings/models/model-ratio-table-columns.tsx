@@ -123,6 +123,27 @@ export function buildModelRatioColumns({
       meta: { label: t('Mode') },
     },
     {
+      accessorKey: 'videoBillingMode',
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} title={t('Video billing')} />
+      ),
+      cell: ({ row }) =>
+        row.original.billingMode === 'per-request' ? (
+          <span className='text-muted-foreground text-sm'>
+            {t(
+              row.original.videoBillingMode === 'per_second'
+                ? 'Per-second'
+                : 'Per-request'
+            )}
+          </span>
+        ) : (
+          <span className='text-muted-foreground'>-</span>
+        ),
+      filterFn: (row, id, value) =>
+        filterBySelectedValues(row.getValue(id), value),
+      meta: { label: t('Video billing') },
+    },
+    {
       id: 'priceSummary',
       header: ({ column }) => (
         <DataTableColumnHeader column={column} title={t('Price summary')} />

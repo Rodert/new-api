@@ -33,6 +33,7 @@ export const createModelPricingSchema = (t: (key: string) => string) =>
     imageRatio: z.string().optional(),
     audioRatio: z.string().optional(),
     audioCompletionRatio: z.string().optional(),
+    videoBillingMode: z.enum(['per_request', 'per_second']).optional(),
   })
 
 export type ModelPricingFormValues = z.infer<
@@ -40,6 +41,7 @@ export type ModelPricingFormValues = z.infer<
 >
 
 export type PricingMode = 'per-token' | 'per-request' | 'tiered_expr'
+export type VideoBillingMode = 'per_request' | 'per_second'
 
 export type LaneKey =
   | 'completion'
@@ -62,6 +64,7 @@ export type ModelRatioData = {
   billingMode?: PricingMode
   billingExpr?: string
   requestRuleExpr?: string
+  videoBillingMode?: VideoBillingMode
 }
 
 export type PreviewRow = {
