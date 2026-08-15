@@ -188,7 +188,11 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
             props.selectedGroup
           )}
         </span>{' '}
-        / {t('request')}
+        / {t(
+          props.model.video_billing_mode === 'per_second'
+            ? 'per second'
+            : 'request'
+        )}
       </span>
     )
   }

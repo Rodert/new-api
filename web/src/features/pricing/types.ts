@@ -54,6 +54,8 @@ export type PricingModel = {
   billing_mode?: string
   /** Raw expression describing dynamic / tiered billing */
   billing_expr?: string
+  /** Fixed-price video billing unit, omitted when billed per request */
+  video_billing_mode?: 'per_second'
   /** Pricing version returned by backend, useful for cache busting */
   pricing_version?: string
   /**
