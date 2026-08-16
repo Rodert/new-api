@@ -147,7 +147,7 @@ describe('media workspace storage', () => {
         model: 'as-sd2.0-fast',
         n: 1,
         prompt: 'first video',
-        qualityPreset: 'hd',
+        resolution: '720p',
         referenceImages: ['https://example.com/reference.png'],
         seconds: '15',
       }
@@ -160,7 +160,7 @@ describe('media workspace storage', () => {
         model: 'as-sd2.0-fast',
         n: 2,
         prompt: 'second video',
-        qualityPreset: 'fast',
+        resolution: '1080p',
         referenceAudio: ['https://example.com/music.mp3'],
         seconds: '10',
       }
@@ -170,6 +170,7 @@ describe('media workspace storage', () => {
     assert.equal(tasks.length, 2)
     assert.equal(tasks[0]?.taskId, 'task_second')
     assert.equal(tasks[0]?.n, 2)
+    assert.equal(tasks[0]?.resolution, '1080p')
     assert.deepEqual(tasks[0]?.referenceAudio, [
       'https://example.com/music.mp3',
     ])

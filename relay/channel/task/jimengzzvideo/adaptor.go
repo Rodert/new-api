@@ -36,6 +36,7 @@ type requestPayload struct {
 	Prompt      string   `json:"prompt"`
 	Seconds     string   `json:"seconds,omitempty"`
 	AspectRatio string   `json:"aspect_ratio,omitempty"`
+	Resolution  string   `json:"resolution,omitempty"`
 	Images      []string `json:"images,omitempty"`
 	Videos      []string `json:"videos,omitempty"`
 	Audios      []string `json:"audios,omitempty"`
@@ -155,6 +156,7 @@ func (a *TaskAdaptor) BuildRequestBody(c *gin.Context, info *relaycommon.RelayIn
 		Prompt:      req.Prompt,
 		Seconds:     req.Seconds,
 		AspectRatio: req.AspectRatio,
+		Resolution:  req.Resolution,
 		Images:      req.Images,
 		Videos:      req.Videos,
 		Audios:      req.Audios,

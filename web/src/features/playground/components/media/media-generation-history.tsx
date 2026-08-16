@@ -314,8 +314,8 @@ function VideoGenerationCard(props: VideoGenerationCardProps) {
             value={`${props.task.seconds}s`}
           />
           <MetadataValue
-            label={t('Clarity')}
-            value={props.task.qualityPreset}
+            label={t('Resolution')}
+            value={props.task.resolution ?? '-'}
           />
           <MetadataValue label={t('Quantity')} value={props.task.n ?? 1} />
         </dl>

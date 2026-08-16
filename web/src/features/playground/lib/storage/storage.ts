@@ -84,7 +84,8 @@ type VideoWorkspaceConfig = {
   group: string
   aspectRatio: string
   seconds: string
-  qualityPreset: string
+  resolution?: string
+  qualityPreset?: string
   n: number
 }
 
@@ -96,7 +97,8 @@ export type VideoWorkspaceTask = VideoTaskResponse & {
   prompt: string
   aspectRatio: string
   seconds: string
-  qualityPreset: string
+  resolution?: string
+  qualityPreset?: string
   n?: number
   referenceImages?: string[]
   referenceVideos?: string[]
@@ -121,7 +123,7 @@ export type VideoWorkspaceMetadata = {
   model: string
   n: number
   prompt: string
-  qualityPreset: string
+  resolution?: string
   referenceAudio?: string[]
   referenceImages?: string[]
   referenceVideos?: string[]
@@ -212,7 +214,6 @@ function createWorkspace(): PlaygroundWorkspace {
         group: DEFAULT_CONFIG.group,
         aspectRatio: '16:9',
         seconds: '5',
-        qualityPreset: 'recommended',
         n: 1,
       },
       tasks: [],
@@ -290,7 +291,6 @@ function migrateLegacyWorkspace(value: unknown): PlaygroundWorkspace {
         prompt: '',
         aspectRatio: workspace.video.config.aspectRatio,
         seconds: workspace.video.config.seconds,
-        qualityPreset: workspace.video.config.qualityPreset,
         createdAt: Date.now(),
       },
     ]
@@ -837,7 +837,7 @@ export function saveVideoWorkspaceTask(
             group: metadata.group,
             aspectRatio: metadata.aspectRatio,
             seconds: metadata.seconds,
-            qualityPreset: metadata.qualityPreset,
+            resolution: metadata.resolution,
             n: metadata.n,
           }
         : workspace.video.config
@@ -858,10 +858,10 @@ export function saveVideoWorkspaceTask(
           videoConfig.aspectRatio,
         seconds:
           metadata?.seconds ?? existingTask?.seconds ?? videoConfig.seconds,
-        qualityPreset:
-          metadata?.qualityPreset ??
-          existingTask?.qualityPreset ??
-          videoConfig.qualityPreset,
+        resolution:
+          metadata?.resolution ??
+          existingTask?.resolution ??
+          videoConfig.resolution,
         n: metadata?.n ?? existingTask?.n ?? videoConfig.n,
         referenceImages:
           metadata?.referenceImages ?? existingTask?.referenceImages,

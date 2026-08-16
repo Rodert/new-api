@@ -99,11 +99,18 @@ const grokVideo15DurationOptions = [4, 6, 8, 10, 12, 15].map((value) => ({
   label: `${value}s`,
   value: String(value),
 }))
-const videoQualityOptions = [
-  { label: 'standard', labelKey: 'Standard', value: 'standard' },
-  { label: 'fast', labelKey: 'Fast', value: 'fast' },
-  { label: 'hd', labelKey: 'HD', value: 'hd' },
-]
+const videoResolutionOptionsByModel: Record<string, string[]> = {
+  'drama-video-v2': ['480p', '720p', '1080p'],
+  'drama-video-v2-fast': ['480p', '720p'],
+  'grok-imagine-video': ['480p', '720p', '1080p'],
+  'grok-imagine-video-1.5-preview': ['480p', '720p', '1080p'],
+  'kling-video-v3': ['720p', '1080p', '4k'],
+  'kling-video-v3-omni': ['720p', '1080p', '4k'],
+  'kling-video-v3-turbo': ['720p', '1080p'],
+  'video-ds-2.5': ['720p'],
+  'video-ds-2.5-480': ['480p'],
+}
+const emptyResolutionOptions: string[] = []
 const videoQuantityOptions = Array.from(
   { length: 10 },
   (_, index) => index + 1
@@ -142,7 +149,7 @@ export function VideoWorkspace({
   const [referenceAudio, setReferenceAudio] = useState<LocalMedia[]>([])
   const [ratio, setRatio] = useState('16:9')
   const [duration, setDuration] = useState(15)
-  const [quality, setQuality] = useState('hd')
+  const [resolution, setResolution] = useState('')
   const [quantity, setQuantity] = useState(1)
   const [tasks, setTasks] = useState<VideoWorkspaceTask[]>(
     loadVideoWorkspaceTasks
@@ -152,12 +159,27 @@ export function VideoWorkspace({
     config.model === 'grok-video-1.5'
       ? grokVideo15DurationOptions
       : defaultVideoDurationOptions
+  const resolutionOptions =
+    videoResolutionOptionsByModel[config.model] ?? emptyResolutionOptions
+  const selectedResolution = resolutionOptions.includes(resolution)
+    ? resolution
+    : (resolutionOptions[0] ?? '')
 
   useEffect(() => {
     if (!durationOptions.some((option) => Number(option.value) === duration)) {
       setDuration(Number(durationOptions[0].value))
     }
   }, [config.model, duration, durationOptions])
+
+  useEffect(() => {
+    if (!resolutionOptions.length) {
+      setResolution('')
+      return
+    }
+    if (!resolutionOptions.includes(resolution)) {
+      setResolution(resolutionOptions[0])
+    }
+  }, [resolution, resolutionOptions])
 
   useEffect(() => {
     const pendingTaskIDs = tasks
@@ -228,7 +250,7 @@ export function VideoWorkspace({
         width,
         height,
         n: metadata.n,
-        quality: metadata.qualityPreset,
+        ...(metadata.resolution ? { resolution: metadata.resolution } : {}),
         ...(metadata.referenceImages?.length
           ? { images: metadata.referenceImages }
           : {}),
@@ -257,7 +279,7 @@ export function VideoWorkspace({
       model: config.model,
       n: quantity,
       prompt: prompt.trim(),
-      qualityPreset: quality,
+      resolution: selectedResolution,
       referenceAudio: referenceAudio.map((media) => media.url),
       referenceImages: referenceImages.map((media) => media.url),
       referenceVideos: referenceVideos.map((media) => media.url),
@@ -274,7 +296,7 @@ export function VideoWorkspace({
     setPrompt(task.prompt)
     setRatio(task.aspectRatio)
     setDuration(Number(task.seconds))
-    setQuality(task.qualityPreset)
+    setResolution(task.resolution ?? '')
     setQuantity(task.n ?? 1)
     setReferenceImages(toLocalMedia(task.referenceImages))
     setReferenceVideos(toLocalMedia(task.referenceVideos))
@@ -285,7 +307,7 @@ export function VideoWorkspace({
       model: task.model,
       n: task.n ?? 1,
       prompt: task.prompt,
-      qualityPreset: task.qualityPreset,
+      resolution: task.resolution,
       referenceAudio: task.referenceAudio,
       referenceImages: task.referenceImages,
       referenceVideos: task.referenceVideos,
@@ -490,30 +512,35 @@ export function VideoWorkspace({
                   </SelectContent>
                 </Select>
               </label>
-              <label className='text-muted-foreground grid gap-1.5 text-xs font-medium'>
-                {t('Clarity')}
-                <Select
-                  disabled={isSubmitting}
-                  items={videoQualityOptions}
-                  onValueChange={(value) => {
-                    if (value) setQuality(value)
-                  }}
-                  value={quality}
-                >
-                  <SelectTrigger className='w-full'>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectGroup>
-                      {videoQualityOptions.map((option) => (
-                        <SelectItem key={option.value} value={option.value}>
-                          {t(option.labelKey)}
-                        </SelectItem>
-                      ))}
-                    </SelectGroup>
-                  </SelectContent>
-                </Select>
-              </label>
+              {resolutionOptions.length ? (
+                <label className='text-muted-foreground grid gap-1.5 text-xs font-medium'>
+                  {t('Resolution')}
+                  <Select
+                    disabled={isSubmitting || resolutionOptions.length === 1}
+                    items={resolutionOptions.map((value) => ({
+                      label: value,
+                      value,
+                    }))}
+                    onValueChange={(value) => {
+                      if (value) setResolution(value)
+                    }}
+                    value={selectedResolution}
+                  >
+                    <SelectTrigger className='w-full'>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectGroup>
+                        {resolutionOptions.map((value) => (
+                          <SelectItem key={value} value={value}>
+                            {value}
+                          </SelectItem>
+                        ))}
+                      </SelectGroup>
+                    </SelectContent>
+                  </Select>
+                </label>
+              ) : null}
               <label className='text-muted-foreground grid gap-1.5 text-xs font-medium'>
                 {t('Quantity')}
                 <Select

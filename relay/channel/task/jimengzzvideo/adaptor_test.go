@@ -26,6 +26,7 @@ func TestBuildRequestBodyUsesJimengZZVideoProtocol(t *testing.T) {
 		Model:       "video-ds-2.0-fast",
 		Seconds:     "15",
 		AspectRatio: "9:16",
+		Resolution:  "720p",
 		Images:      []string{"https://example.com/first.png"},
 		Videos:      []string{"https://example.com/input.mp4"},
 		Audios:      []string{"https://example.com/input.mp3"},
@@ -45,12 +46,14 @@ func TestBuildRequestBodyUsesJimengZZVideoProtocol(t *testing.T) {
 		Prompt:      "A cat on a skateboard",
 		Seconds:     "15",
 		AspectRatio: "9:16",
+		Resolution:  "720p",
 		Images:      []string{"https://example.com/first.png"},
 		Videos:      []string{"https://example.com/input.mp4"},
 		Audios:      []string{"https://example.com/input.mp3"},
 	}, got)
 	assert.NotContains(t, string(data), "duration")
 	assert.NotContains(t, string(data), "size")
+	assert.Contains(t, string(data), `"resolution":"720p"`)
 }
 
 func TestDoResponseKeepsUpstreamIDPrivate(t *testing.T) {
