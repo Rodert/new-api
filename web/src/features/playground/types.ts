@@ -163,7 +163,6 @@ export interface VideoGenerationRequest {
   duration: number
   width: number
   height: number
-  n: number
 }
 
 export interface VideoTaskResponse {

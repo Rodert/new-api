@@ -86,7 +86,7 @@ describe('media workspace storage', () => {
     assert.ok(workspace.chat)
     assert.equal(workspace.image.config.response_format, 'url')
     assert.equal(workspace.image.items.length, 1)
-    assert.equal(workspace.video.config.n, 1)
+    assert.equal('n' in workspace.video.config, false)
     assert.equal(workspace.video.tasks.length, 1)
   })
 
@@ -169,7 +169,6 @@ describe('media workspace storage', () => {
     const tasks = loadVideoWorkspaceTasks()
     assert.equal(tasks.length, 2)
     assert.equal(tasks[0]?.taskId, 'task_second')
-    assert.equal(tasks[0]?.n, 2)
     assert.equal(tasks[0]?.resolution, '1080p')
     assert.deepEqual(tasks[0]?.referenceAudio, [
       'https://example.com/music.mp3',

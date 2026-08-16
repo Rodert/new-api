@@ -86,7 +86,6 @@ type VideoWorkspaceConfig = {
   seconds: string
   resolution?: string
   qualityPreset?: string
-  n: number
 }
 
 export type VideoWorkspaceTask = VideoTaskResponse & {
@@ -99,7 +98,6 @@ export type VideoWorkspaceTask = VideoTaskResponse & {
   seconds: string
   resolution?: string
   qualityPreset?: string
-  n?: number
   referenceImages?: string[]
   referenceVideos?: string[]
   referenceAudio?: string[]
@@ -214,7 +212,6 @@ function createWorkspace(): PlaygroundWorkspace {
         group: DEFAULT_CONFIG.group,
         aspectRatio: '16:9',
         seconds: '5',
-        n: 1,
       },
       tasks: [],
     },
@@ -838,7 +835,6 @@ export function saveVideoWorkspaceTask(
             aspectRatio: metadata.aspectRatio,
             seconds: metadata.seconds,
             resolution: metadata.resolution,
-            n: metadata.n,
           }
         : workspace.video.config
       const existingTask = workspace.video.tasks.find(
@@ -862,7 +858,6 @@ export function saveVideoWorkspaceTask(
           metadata?.resolution ??
           existingTask?.resolution ??
           videoConfig.resolution,
-        n: metadata?.n ?? existingTask?.n ?? videoConfig.n,
         referenceImages:
           metadata?.referenceImages ?? existingTask?.referenceImages,
         referenceVideos:

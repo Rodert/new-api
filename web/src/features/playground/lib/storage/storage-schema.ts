@@ -162,7 +162,6 @@ const videoWorkspaceConfigSchema = z.object({
   seconds: z.string(),
   resolution: z.string().optional(),
   qualityPreset: z.string().optional(),
-  n: z.number().int().min(1).max(10),
 })
 
 const videoWorkspaceTaskSchema = videoTaskResponseSchema.extend({
@@ -175,7 +174,6 @@ const videoWorkspaceTaskSchema = videoTaskResponseSchema.extend({
   seconds: z.string(),
   resolution: z.string().optional(),
   qualityPreset: z.string().optional(),
-  n: z.number().int().min(1).max(10).optional(),
   referenceImages: z.array(z.string()).optional(),
   referenceVideos: z.array(z.string()).optional(),
   referenceAudio: z.array(z.string()).optional(),

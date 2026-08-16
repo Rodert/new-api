@@ -317,7 +317,6 @@ function VideoGenerationCard(props: VideoGenerationCardProps) {
             label={t('Resolution')}
             value={props.task.resolution ?? '-'}
           />
-          <MetadataValue label={t('Quantity')} value={props.task.n ?? 1} />
         </dl>
         <div className='text-muted-foreground flex flex-wrap gap-x-3 gap-y-1 text-xs'>
           {props.task.referenceImages?.length ? (

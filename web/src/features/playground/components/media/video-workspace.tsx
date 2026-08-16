@@ -111,14 +111,6 @@ const videoResolutionOptionsByModel: Record<string, string[]> = {
   'video-ds-2.5-480': ['480p'],
 }
 const emptyResolutionOptions: string[] = []
-const videoQuantityOptions = Array.from(
-  { length: 10 },
-  (_, index) => index + 1
-).map((value) => ({
-  label: String(value),
-  value: String(value),
-}))
-
 function getVideoDimensions(ratio: string): [number, number] {
   if (ratio === '9:16') return [720, 1280]
   if (ratio === '1:1') return [1024, 1024]
@@ -150,7 +142,6 @@ export function VideoWorkspace({
   const [ratio, setRatio] = useState('16:9')
   const [duration, setDuration] = useState(15)
   const [resolution, setResolution] = useState('')
-  const [quantity, setQuantity] = useState(1)
   const [tasks, setTasks] = useState<VideoWorkspaceTask[]>(
     loadVideoWorkspaceTasks
   )
@@ -249,7 +240,6 @@ export function VideoWorkspace({
         duration: Number(metadata.seconds),
         width,
         height,
-        n: metadata.n,
         ...(metadata.resolution ? { resolution: metadata.resolution } : {}),
         ...(metadata.referenceImages?.length
           ? { images: metadata.referenceImages }
@@ -277,7 +267,6 @@ export function VideoWorkspace({
       aspectRatio: ratio,
       group: config.group,
       model: config.model,
-      n: quantity,
       prompt: prompt.trim(),
       resolution: selectedResolution,
       referenceAudio: referenceAudio.map((media) => media.url),
@@ -297,7 +286,6 @@ export function VideoWorkspace({
     setRatio(task.aspectRatio)
     setDuration(Number(task.seconds))
     setResolution(task.resolution ?? '')
-    setQuantity(task.n ?? 1)
     setReferenceImages(toLocalMedia(task.referenceImages))
     setReferenceVideos(toLocalMedia(task.referenceVideos))
     setReferenceAudio(toLocalMedia(task.referenceAudio))
@@ -305,7 +293,6 @@ export function VideoWorkspace({
       aspectRatio: task.aspectRatio,
       group: task.group,
       model: task.model,
-      n: task.n ?? 1,
       prompt: task.prompt,
       resolution: task.resolution,
       referenceAudio: task.referenceAudio,
@@ -541,28 +528,6 @@ export function VideoWorkspace({
                   </Select>
                 </label>
               ) : null}
-              <label className='text-muted-foreground grid gap-1.5 text-xs font-medium'>
-                {t('Quantity')}
-                <Select
-                  disabled={isSubmitting}
-                  items={videoQuantityOptions}
-                  onValueChange={(value) => setQuantity(Number(value))}
-                  value={String(quantity)}
-                >
-                  <SelectTrigger className='w-full'>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectGroup>
-                      {videoQuantityOptions.map((option) => (
-                        <SelectItem key={option.value} value={option.value}>
-                          {option.label}
-                        </SelectItem>
-                      ))}
-                    </SelectGroup>
-                  </SelectContent>
-                </Select>
-              </label>
             </div>
 
             {renderMediaCard(
