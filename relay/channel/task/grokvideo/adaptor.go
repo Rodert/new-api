@@ -65,6 +65,21 @@ func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycom
 	if len(images) > 7 {
 		return service.TaskErrorWrapperLocal(errors.New("image_urls supports at most 7 items"), "invalid_images", http.StatusBadRequest)
 	}
+	if info.UpstreamModelName == "grok-video-1.5" {
+		seconds := req.Duration
+		if req.Seconds != "" {
+			parsedSeconds, parseErr := strconv.Atoi(req.Seconds)
+			if parseErr != nil {
+				return service.TaskErrorWrapperLocal(errors.New("seconds must be one of: 4, 6, 8, 10, 12, 15"), "invalid_seconds", http.StatusBadRequest)
+			}
+			seconds = parsedSeconds
+		}
+		if seconds != 0 {
+			if _, ok := grokVideo15SupportedSeconds[seconds]; !ok {
+				return service.TaskErrorWrapperLocal(errors.New("seconds must be one of: 4, 6, 8, 10, 12, 15"), "invalid_seconds", http.StatusBadRequest)
+			}
+		}
+	}
 	for _, image := range images {
 		if strings.HasPrefix(image, "data:") {
 			continue

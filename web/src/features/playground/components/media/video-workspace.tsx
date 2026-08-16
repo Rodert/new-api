@@ -91,7 +91,11 @@ const videoRatioOptions = [
   { label: '16:9', value: '16:9' },
   { label: '9:16', value: '9:16' },
 ]
-const videoDurationOptions = [5, 10, 15].map((value) => ({
+const defaultVideoDurationOptions = [5, 10, 15].map((value) => ({
+  label: `${value}s`,
+  value: String(value),
+}))
+const grokVideo15DurationOptions = [4, 6, 8, 10, 12, 15].map((value) => ({
   label: `${value}s`,
   value: String(value),
 }))
@@ -144,6 +148,16 @@ export function VideoWorkspace({
     loadVideoWorkspaceTasks
   )
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const durationOptions =
+    config.model === 'grok-video-1.5'
+      ? grokVideo15DurationOptions
+      : defaultVideoDurationOptions
+
+  useEffect(() => {
+    if (!durationOptions.some((option) => Number(option.value) === duration)) {
+      setDuration(Number(durationOptions[0].value))
+    }
+  }, [config.model, duration, durationOptions])
 
   useEffect(() => {
     const pendingTaskIDs = tasks
@@ -458,7 +472,7 @@ export function VideoWorkspace({
                 {t('Duration')}
                 <Select
                   disabled={isSubmitting}
-                  items={videoDurationOptions}
+                  items={durationOptions}
                   onValueChange={(value) => setDuration(Number(value))}
                   value={String(duration)}
                 >
@@ -467,7 +481,7 @@ export function VideoWorkspace({
                   </SelectTrigger>
                   <SelectContent>
                     <SelectGroup>
-                      {videoDurationOptions.map((option) => (
+                      {durationOptions.map((option) => (
                         <SelectItem key={option.value} value={option.value}>
                           {option.label}
                         </SelectItem>

@@ -3,6 +3,7 @@ package grokvideo
 import (
 	"io"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
@@ -55,4 +56,32 @@ func TestParseTaskResultUsesDocumentedResponseFormat(t *testing.T) {
 	assert.Equal(t, "SUCCESS", string(result.Status))
 	assert.Equal(t, "https://cdn.example/video.mp4", result.Url)
 	assert.Equal(t, "100%", result.Progress)
+}
+
+func TestValidateGrokVideo15Seconds(t *testing.T) {
+	for _, test := range []struct {
+		seconds string
+		valid   bool
+	}{
+		{seconds: "4", valid: true},
+		{seconds: "15", valid: true},
+		{seconds: "5", valid: false},
+	} {
+		t.Run(test.seconds, func(t *testing.T) {
+			ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+			ctx.Request = httptest.NewRequest("POST", "/v1/videos", strings.NewReader(`{"prompt":"A cinematic scene","seconds":"`+test.seconds+`"}`))
+			ctx.Request.Header.Set("Content-Type", "application/json")
+
+			taskErr := (&TaskAdaptor{}).ValidateRequestAndSetAction(ctx, &relaycommon.RelayInfo{
+				ChannelMeta: &relaycommon.ChannelMeta{UpstreamModelName: "grok-video-1.5"},
+			})
+			if test.valid {
+				require.Nil(t, taskErr)
+				return
+			}
+			require.NotNil(t, taskErr)
+			assert.Equal(t, "invalid_seconds", taskErr.Code)
+			assert.Equal(t, "seconds must be one of: 4, 6, 8, 10, 12, 15", taskErr.Message)
+		})
+	}
 }
