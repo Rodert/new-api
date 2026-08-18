@@ -76,7 +76,7 @@ type ImageReference = {
   url: string
 }
 
-const maxReferenceImages = 1
+const maxReferenceImages = 3
 const maxReferenceImageBytes = 10 * 1024 * 1024
 const imageSizeOptions = [
   { label: '1:1', value: '1024x1024' },
