@@ -123,6 +123,64 @@ func TestValidateRequestRejectsNonPublicMediaURL(t *testing.T) {
 	assert.Equal(t, "invalid_media_url", taskErr.Code)
 }
 
+func TestValidateRequestAcceptsSeedance25Capabilities(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	images := make([]string, 30)
+	videos := make([]string, 10)
+	audios := make([]string, 10)
+	for i := range images {
+		images[i] = "https://example.com/image.png"
+	}
+	for i := range videos {
+		videos[i] = "https://example.com/input.mp4"
+	}
+	for i := range audios {
+		audios[i] = "https://example.com/input.mp3"
+	}
+	body, err := common.Marshal(map[string]any{
+		"model":      "seedance2.5",
+		"prompt":     "A cinematic scene",
+		"seconds":    "30",
+		"resolution": "720p",
+		"images":     images,
+		"videos":     videos,
+		"audios":     audios,
+	})
+	require.NoError(t, err)
+
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/videos", strings.NewReader(string(body)))
+	ctx.Request.Header.Set("Content-Type", "application/json")
+
+	taskErr := (&TaskAdaptor{}).ValidateRequestAndSetAction(ctx, &relaycommon.RelayInfo{TaskRelayInfo: &relaycommon.TaskRelayInfo{}})
+	require.Nil(t, taskErr)
+}
+
+func TestValidateRequestRejectsUnsupportedSeedance25Parameters(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	tests := []struct {
+		name string
+		body string
+		code string
+	}{
+		{name: "short duration", body: `{"model":"seedance2.5","prompt":"A scene","seconds":"3"}`, code: "invalid_seconds"},
+		{name: "long duration", body: `{"model":"seedance2.5","prompt":"A scene","seconds":"31"}`, code: "invalid_seconds"},
+		{name: "unsupported resolution", body: `{"model":"seedance2.5","prompt":"A scene","seconds":"4","resolution":"1080p"}`, code: "invalid_resolution"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+			ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/videos", strings.NewReader(tt.body))
+			ctx.Request.Header.Set("Content-Type", "application/json")
+
+			taskErr := (&TaskAdaptor{}).ValidateRequestAndSetAction(ctx, &relaycommon.RelayInfo{TaskRelayInfo: &relaycommon.TaskRelayInfo{}})
+			require.NotNil(t, taskErr)
+			assert.Equal(t, tt.code, taskErr.Code)
+		})
+	}
+}
+
 func TestEstimateBillingUsesSecondsOnlyForPerSecondModels(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())

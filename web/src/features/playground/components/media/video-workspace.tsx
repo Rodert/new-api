@@ -83,9 +83,11 @@ type LocalMedia = {
 
 const completedStatuses = new Set(['succeeded', 'success', 'completed'])
 const failedStatuses = new Set(['failed', 'error', 'cancelled', 'canceled'])
-const maxReferenceImages = 4
-const maxReferenceVideos = 3
-const maxReferenceAudio = 1
+const defaultMediaLimits = {
+  images: 4,
+  videos: 3,
+  audios: 1,
+}
 const videoRatioOptions = [
   { label: '1:1', value: '1:1' },
   { label: '16:9', value: '16:9' },
@@ -99,6 +101,18 @@ const grokVideo15DurationOptions = [4, 6, 8, 10, 12, 15].map((value) => ({
   label: `${value}s`,
   value: String(value),
 }))
+const seedance25DurationOptions = Array.from({ length: 27 }, (_, index) => {
+  const value = index + 4
+  return { label: `${value}s`, value: String(value) }
+})
+const klingVideoDurationOptions = Array.from({ length: 13 }, (_, index) => {
+  const value = index + 3
+  return { label: `${value}s`, value: String(value) }
+})
+const minimaxH3DurationOptions = Array.from({ length: 11 }, (_, index) => {
+  const value = index + 5
+  return { label: `${value}s`, value: String(value) }
+})
 const videoResolutionOptionsByModel: Record<string, string[]> = {
   'drama-video-v2': ['480p', '720p', '1080p'],
   'drama-video-v2-fast': ['480p', '720p'],
@@ -109,6 +123,15 @@ const videoResolutionOptionsByModel: Record<string, string[]> = {
   'kling-video-v3-turbo': ['720p', '1080p'],
   'video-ds-2.5': ['720p'],
   'video-ds-2.5-480': ['480p'],
+  'seedance2.5': ['480p', '720p'],
+  'minimax-h3': ['2k'],
+}
+const mediaLimitsByModel: Record<string, typeof defaultMediaLimits> = {
+  'seedance2.5': {
+    images: 30,
+    videos: 10,
+    audios: 10,
+  },
 }
 const emptyResolutionOptions: string[] = []
 function getVideoDimensions(ratio: string): [number, number] {
@@ -146,10 +169,21 @@ export function VideoWorkspace({
     loadVideoWorkspaceTasks
   )
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const durationOptions =
-    config.model === 'grok-video-1.5'
-      ? grokVideo15DurationOptions
-      : defaultVideoDurationOptions
+  let durationOptions = defaultVideoDurationOptions
+  if (config.model === 'seedance2.5') {
+    durationOptions = seedance25DurationOptions
+  } else if (config.model === 'minimax-h3') {
+    durationOptions = minimaxH3DurationOptions
+  } else if (
+    config.model === 'kling-video-v3' ||
+    config.model === 'kling-video-v3-omni' ||
+    config.model === 'kling-video-v3-turbo'
+  ) {
+    durationOptions = klingVideoDurationOptions
+  } else if (config.model === 'grok-video-1.5') {
+    durationOptions = grokVideo15DurationOptions
+  }
+  const mediaLimits = mediaLimitsByModel[config.model] ?? defaultMediaLimits
   const resolutionOptions =
     videoResolutionOptionsByModel[config.model] ?? emptyResolutionOptions
   const selectedResolution = resolutionOptions.includes(resolution)
@@ -538,7 +572,7 @@ export function VideoWorkspace({
               'image/png,image/jpeg,image/webp',
               'image',
               referenceImages,
-              maxReferenceImages,
+              mediaLimits.images,
               setReferenceImages,
               true
             )}
@@ -550,7 +584,7 @@ export function VideoWorkspace({
               'video/mp4,video/quicktime,video/webm',
               'video',
               referenceVideos,
-              maxReferenceVideos,
+              mediaLimits.videos,
               setReferenceVideos
             )}
             {renderMediaCard(
@@ -561,7 +595,7 @@ export function VideoWorkspace({
               'audio/mpeg,audio/mp4,audio/wav,audio/aac,audio/ogg',
               'audio',
               referenceAudio,
-              maxReferenceAudio,
+              mediaLimits.audios,
               setReferenceAudio
             )}
 

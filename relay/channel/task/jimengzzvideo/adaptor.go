@@ -25,12 +25,6 @@ import (
 	"github.com/tidwall/sjson"
 )
 
-const (
-	maxImages = 4
-	maxVideos = 3
-	maxAudios = 1
-)
-
 type requestPayload struct {
 	Model       string   `json:"model"`
 	Prompt      string   `json:"prompt"`
@@ -86,14 +80,15 @@ func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycom
 	if strings.TrimSpace(req.Model) == "" {
 		return service.TaskErrorWrapperLocal(errors.New("model is required"), "missing_model", http.StatusBadRequest)
 	}
-	if len(req.Images) > maxImages {
-		return service.TaskErrorWrapperLocal(fmt.Errorf("images supports at most %d items", maxImages), "invalid_images", http.StatusBadRequest)
+	capabilities := getModelCapabilities(req.Model)
+	if len(req.Images) > capabilities.MaxImages {
+		return service.TaskErrorWrapperLocal(fmt.Errorf("images supports at most %d items", capabilities.MaxImages), "invalid_images", http.StatusBadRequest)
 	}
-	if len(req.Videos) > maxVideos {
-		return service.TaskErrorWrapperLocal(fmt.Errorf("videos supports at most %d items", maxVideos), "invalid_videos", http.StatusBadRequest)
+	if len(req.Videos) > capabilities.MaxVideos {
+		return service.TaskErrorWrapperLocal(fmt.Errorf("videos supports at most %d items", capabilities.MaxVideos), "invalid_videos", http.StatusBadRequest)
 	}
-	if len(req.Audios) > maxAudios {
-		return service.TaskErrorWrapperLocal(fmt.Errorf("audios supports at most %d item", maxAudios), "invalid_audios", http.StatusBadRequest)
+	if len(req.Audios) > capabilities.MaxAudios {
+		return service.TaskErrorWrapperLocal(fmt.Errorf("audios supports at most %d item", capabilities.MaxAudios), "invalid_audios", http.StatusBadRequest)
 	}
 	for field, values := range map[string][]string{
 		"images": req.Images,
@@ -111,6 +106,14 @@ func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycom
 		seconds, err := strconv.Atoi(req.Seconds)
 		if err != nil || seconds < 1 || seconds > relaycommon.MaxTaskDurationSeconds {
 			return service.TaskErrorWrapperLocal(fmt.Errorf("seconds must be between 1 and %d", relaycommon.MaxTaskDurationSeconds), "invalid_seconds", http.StatusBadRequest)
+		}
+		if capabilities.MinSeconds > 0 && (seconds < capabilities.MinSeconds || seconds > capabilities.MaxSeconds) {
+			return service.TaskErrorWrapperLocal(fmt.Errorf("seconds must be between %d and %d", capabilities.MinSeconds, capabilities.MaxSeconds), "invalid_seconds", http.StatusBadRequest)
+		}
+	}
+	if len(capabilities.Resolutions) > 0 && req.Resolution != "" {
+		if _, ok := capabilities.Resolutions[req.Resolution]; !ok {
+			return service.TaskErrorWrapperLocal(errors.New("resolution must be one of: 480p, 720p"), "invalid_resolution", http.StatusBadRequest)
 		}
 	}
 	return nil
@@ -150,11 +153,15 @@ func (a *TaskAdaptor) BuildRequestBody(c *gin.Context, info *relaycommon.RelayIn
 	if err != nil {
 		return nil, err
 	}
+	seconds := req.Seconds
+	if seconds == "" && req.Duration > 0 {
+		seconds = strconv.Itoa(req.Duration)
+	}
 
 	body := requestPayload{
 		Model:       info.UpstreamModelName,
 		Prompt:      req.Prompt,
-		Seconds:     req.Seconds,
+		Seconds:     seconds,
 		AspectRatio: req.AspectRatio,
 		Resolution:  req.Resolution,
 		Images:      req.Images,
