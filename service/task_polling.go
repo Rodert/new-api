@@ -471,6 +471,10 @@ func updateVideoSingleTask(ctx context.Context, adaptor TaskPollingAdaptor, ch *
 	if err != nil {
 		return fmt.Errorf("readAll failed for task %s: %w", taskId, err)
 	}
+	if isTransientTaskPollingResponse(resp.StatusCode, responseBody) {
+		logger.LogWarn(ctx, fmt.Sprintf("Task %s polling received a transient upstream response (status %d); preserving current task state", taskId, resp.StatusCode))
+		return nil
+	}
 
 	logger.LogDebug(ctx, "updateVideoSingleTask response: %s", responseBody)
 
@@ -599,6 +603,39 @@ func updateVideoSingleTask(ctx context.Context, adaptor TaskPollingAdaptor, ch *
 	}
 
 	return nil
+}
+
+func isTransientTaskPollingResponse(statusCode int, body []byte) bool {
+	if statusCode >= http.StatusInternalServerError && statusCode <= 599 {
+		return true
+	}
+
+	var response map[string]any
+	if common.Unmarshal(body, &response) != nil {
+		return false
+	}
+	return responseDeclaresRetryable(response)
+}
+
+func responseDeclaresRetryable(response map[string]any) bool {
+	if retryable, ok := response["retryable"].(bool); ok && retryable {
+		return true
+	}
+	for _, value := range response {
+		switch nested := value.(type) {
+		case map[string]any:
+			if responseDeclaresRetryable(nested) {
+				return true
+			}
+		case []any:
+			for _, item := range nested {
+				if itemMap, ok := item.(map[string]any); ok && responseDeclaresRetryable(itemMap) {
+					return true
+				}
+			}
+		}
+	}
+	return false
 }
 
 func redactVideoResponseBody(body []byte) []byte {

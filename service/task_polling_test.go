@@ -5,6 +5,7 @@ import (
 	"context"
 	"io"
 	"net/http"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -32,6 +33,28 @@ type taskPollingFetchAdaptor struct {
 
 type sunoFailurePollingAdaptor struct {
 	failReason string
+}
+
+type transientErrorPollingAdaptor struct {
+	statusCode int
+	body       string
+}
+
+func (a *transientErrorPollingAdaptor) Init(_ *relaycommon.RelayInfo) {}
+
+func (a *transientErrorPollingAdaptor) FetchTask(_ string, _ string, _ map[string]any, _ string) (*http.Response, error) {
+	return &http.Response{
+		StatusCode: a.statusCode,
+		Body:       io.NopCloser(strings.NewReader(a.body)),
+	}, nil
+}
+
+func (a *transientErrorPollingAdaptor) ParseTaskResult([]byte) (*relaycommon.TaskInfo, error) {
+	return nil, nil
+}
+
+func (a *transientErrorPollingAdaptor) AdjustBillingOnComplete(_ *model.Task, _ *relaycommon.TaskInfo) int {
+	return 0
 }
 
 func (a *sunoFailurePollingAdaptor) Init(_ *relaycommon.RelayInfo) {}
@@ -223,6 +246,38 @@ func TestUpdateVideoTasksCanSkipPollingSleepPerChannel(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, 2, adaptor.fetchCount())
+}
+
+func TestUpdateVideoTasksKeepsTaskActiveAfterUpstream502(t *testing.T) {
+	truncate(t)
+
+	const channelID = 103
+	seedTaskPollingChannel(t, channelID, true)
+	task := seedPollingTask(t, channelID, "task_public_502", "upstream_502")
+	adaptor := &transientErrorPollingAdaptor{
+		statusCode: http.StatusBadGateway,
+		body:       `{"retryable":true,"message":"origin overloaded"}`,
+	}
+	previousFactory := GetTaskAdaptorFunc
+	GetTaskAdaptorFunc = func(constant.TaskPlatform) TaskPollingAdaptor { return adaptor }
+	t.Cleanup(func() { GetTaskAdaptorFunc = previousFactory })
+
+	require.NoError(t, UpdateVideoTasks(context.Background(), constant.TaskPlatform("kling"), map[int][]string{
+		channelID: {task.GetUpstreamTaskID()},
+	}, map[string]*model.Task{
+		task.GetUpstreamTaskID(): task,
+	}))
+
+	var reloaded model.Task
+	require.NoError(t, model.DB.First(&reloaded, task.ID).Error)
+	assert.Equal(t, model.TaskStatusInProgress, reloaded.Status)
+	assert.Equal(t, "30%", reloaded.Progress)
+	assert.Empty(t, reloaded.FailReason)
+}
+
+func TestTransientTaskPollingResponseRecognizesRetryablePayload(t *testing.T) {
+	assert.True(t, isTransientTaskPollingResponse(http.StatusOK, []byte(`{"error":{"retryable":true}}`)))
+	assert.False(t, isTransientTaskPollingResponse(http.StatusUnprocessableEntity, []byte(`{"error":{"retryable":false}}`)))
 }
 
 func TestUpdateVideoTasksDefaultSleepDoesNotBlockOtherChannels(t *testing.T) {
