@@ -15,6 +15,7 @@ func TestFormatUserLogsStripsQuotaSaturation(t *testing.T) {
 	other := common.MapToJsonStr(map[string]interface{}{
 		"model_price": 0.004,
 		"admin_info": map[string]interface{}{
+			"upstream_error": "status_code=502, upstream gateway failure",
 			"quota_saturation": map[string]interface{}{
 				"op":      "QuotaFromDecimal",
 				"kind":    "overflow",

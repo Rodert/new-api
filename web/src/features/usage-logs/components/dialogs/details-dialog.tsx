@@ -813,6 +813,18 @@ export function DetailsDialog(props: DetailsDialogProps) {
           </DetailSection>
         )}
 
+        {props.isAdmin && other?.admin_info?.upstream_error && (
+          <DetailSection
+            icon={<AlertTriangle className='size-3.5' aria-hidden='true' />}
+            label={t('Upstream Response')}
+            variant='danger'
+          >
+            <p className='text-xs wrap-break-word whitespace-pre-wrap'>
+              {other.admin_info.upstream_error}
+            </p>
+          </DetailSection>
+        )}
+
         {/* Reject reason (admin only) */}
         {props.isAdmin && other?.reject_reason && (
           <DetailSection

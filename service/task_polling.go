@@ -288,6 +288,7 @@ func updateSunoTasks(ctx context.Context, channelId int, taskIds []string, taskM
 		task.FinishTime = lo.If(responseItem.FinishTime != 0, responseItem.FinishTime).Else(task.FinishTime)
 		isFailure := responseItem.FailReason != "" || task.Status == model.TaskStatusFailure
 		if isFailure {
+			SetTaskUpstreamFailure(task, responseItem.FailReason)
 			logger.LogInfo(ctx, task.TaskID+" 构建失败，"+task.FailReason)
 			task.Status = model.TaskStatusFailure
 			task.Progress = "100%"
@@ -561,7 +562,7 @@ func updateVideoSingleTask(ctx context.Context, adaptor TaskPollingAdaptor, ch *
 		if task.FinishTime == 0 {
 			task.FinishTime = now
 		}
-		task.FailReason = taskResult.Reason
+		SetTaskUpstreamFailure(task, taskResult.Reason)
 		logger.LogInfo(ctx, fmt.Sprintf("Task %s failed: %s", task.TaskID, task.FailReason))
 		taskResult.Progress = taskcommon.ProgressComplete
 		if quota != 0 {
@@ -603,6 +604,16 @@ func updateVideoSingleTask(ctx context.Context, adaptor TaskPollingAdaptor, ch *
 	}
 
 	return nil
+}
+
+const userVisibleUpstreamTaskFailure = "上游任务执行失败，请稍后重试或联系管理员"
+
+// SetTaskUpstreamFailure keeps the raw provider response out of user-visible task fields.
+func SetTaskUpstreamFailure(task *model.Task, upstreamReason string) {
+	if reason := strings.TrimSpace(upstreamReason); reason != "" {
+		task.PrivateData.UpstreamFailReason = reason
+	}
+	task.FailReason = userVisibleUpstreamTaskFailure
 }
 
 func isTransientTaskPollingResponse(statusCode int, body []byte) bool {

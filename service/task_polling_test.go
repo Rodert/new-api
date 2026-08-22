@@ -280,6 +280,16 @@ func TestTransientTaskPollingResponseRecognizesRetryablePayload(t *testing.T) {
 	assert.False(t, isTransientTaskPollingResponse(http.StatusUnprocessableEntity, []byte(`{"error":{"retryable":false}}`)))
 }
 
+func TestSetTaskUpstreamFailureHidesRawReasonFromUsers(t *testing.T) {
+	task := &model.Task{}
+	rawReason := `{"zone":"upstream.example","ray_id":"abc"}`
+
+	SetTaskUpstreamFailure(task, rawReason)
+
+	assert.Equal(t, userVisibleUpstreamTaskFailure, task.FailReason)
+	assert.Equal(t, rawReason, task.PrivateData.UpstreamFailReason)
+}
+
 func TestUpdateVideoTasksDefaultSleepDoesNotBlockOtherChannels(t *testing.T) {
 	truncate(t)
 

@@ -389,6 +389,7 @@ func processChannelError(c *gin.Context, channelError types.ChannelError, err *t
 		other["channel_name"] = c.GetString("channel_name")
 		other["channel_type"] = c.GetInt("channel_type")
 		adminInfo := make(map[string]interface{})
+		adminInfo["upstream_error"] = err.MaskSensitiveErrorWithStatusCode()
 		adminInfo["use_channel"] = c.GetStringSlice("use_channel")
 		isMultiKey := common.GetContextKeyBool(c, constant.ContextKeyChannelIsMultiKey)
 		if isMultiKey {
@@ -402,7 +403,7 @@ func processChannelError(c *gin.Context, channelError types.ChannelError, err *t
 			startTime = time.Now()
 		}
 		useTimeSeconds := int(time.Since(startTime).Seconds())
-		model.RecordErrorLog(c, userId, channelId, modelName, tokenName, err.MaskSensitiveErrorWithStatusCode(), tokenId, useTimeSeconds, common.GetContextKeyBool(c, constant.ContextKeyIsStream), userGroup, other)
+		model.RecordErrorLog(c, userId, channelId, modelName, tokenName, "上游服务请求失败，请稍后重试或联系管理员", tokenId, useTimeSeconds, common.GetContextKeyBool(c, constant.ContextKeyIsStream), userGroup, other)
 	}
 
 }
@@ -615,6 +616,8 @@ func RelayTask(c *gin.Context) {
 func respondTaskError(c *gin.Context, taskErr *taskdto.TaskError) {
 	if taskErr.StatusCode == http.StatusTooManyRequests {
 		taskErr.Message = "当前分组上游负载已饱和，请稍后再试"
+	} else if !taskErr.LocalError {
+		taskErr.Message = "上游服务请求失败，请稍后重试或联系管理员"
 	}
 	c.JSON(taskErr.StatusCode, taskErr)
 }

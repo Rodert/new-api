@@ -495,6 +495,9 @@ func tryRealtimeFetch(task *model.Task, isOpenAIVideoAPI bool) []byte {
 		return nil
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode >= http.StatusBadRequest {
+		return nil
+	}
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil
@@ -513,6 +516,9 @@ func tryRealtimeFetch(task *model.Task, isOpenAIVideoAPI bool) []byte {
 	if ti.Progress != "" {
 		task.Progress = ti.Progress
 	}
+	if task.Status == model.TaskStatusFailure {
+		service.SetTaskUpstreamFailure(task, ti.Reason)
+	}
 	if strings.HasPrefix(ti.Url, "data:") {
 		// data: URI — kept in Data, not ResultURL
 	} else if ti.Url != "" {
@@ -524,6 +530,9 @@ func tryRealtimeFetch(task *model.Task, isOpenAIVideoAPI bool) []byte {
 
 	if !snap.Equal(task.Snapshot()) {
 		_, _ = task.UpdateWithStatus(snap.Status)
+	}
+	if task.Status == model.TaskStatusFailure {
+		return nil
 	}
 
 	if channelModel.Type == constant.ChannelTypeJimengZZVideo {
@@ -604,6 +613,10 @@ func mapTaskStatusToSimple(status model.TaskStatus) string {
 }
 
 func TaskModel2Dto(task *model.Task) *dto.TaskDto {
+	data := task.Data
+	if task.Status == model.TaskStatusFailure {
+		data = nil
+	}
 	return &dto.TaskDto{
 		ID:         task.ID,
 		CreatedAt:  task.CreatedAt,
@@ -624,6 +637,6 @@ func TaskModel2Dto(task *model.Task) *dto.TaskDto {
 		Progress:   task.Progress,
 		Properties: task.Properties,
 		Username:   task.Username,
-		Data:       task.Data,
+		Data:       data,
 	}
 }

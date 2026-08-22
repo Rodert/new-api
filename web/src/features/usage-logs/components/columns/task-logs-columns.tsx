@@ -218,7 +218,10 @@ export function useTaskLogsColumns(isAdmin: boolean): ColumnDef<TaskLog>[] {
       header: t('Details'),
       cell: function DetailsCell({ row }) {
         const log = row.original
-        const failReason = row.getValue('fail_reason') as string
+        const failReason =
+          isAdmin && log.admin_fail_reason
+            ? log.admin_fail_reason
+            : (row.getValue('fail_reason') as string)
         const status = log.status
         const [dialogOpen, setDialogOpen] = useState(false)
 

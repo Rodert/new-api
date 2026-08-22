@@ -298,6 +298,22 @@ func (a *TaskAdaptor) GetChannelName() string {
 }
 
 func (a *TaskAdaptor) ConvertToOpenAIVideo(originTask *model.Task) ([]byte, error) {
+	if originTask.Status == model.TaskStatusFailure {
+		video := dto.NewOpenAIVideo()
+		video.ID = originTask.TaskID
+		video.TaskID = originTask.TaskID
+		video.Status = dto.VideoStatusFailed
+		video.SetProgressStr(originTask.Progress)
+		video.CreatedAt = originTask.CreatedAt
+		video.CompletedAt = originTask.FinishTime
+		video.Model = originTask.Properties.OriginModelName
+		video.Error = &dto.OpenAIVideoError{
+			Message: "Upstream task failed. Please retry later or contact an administrator.",
+			Code:    "upstream_task_failed",
+		}
+		return common.Marshal(video)
+	}
+
 	data, err := sjson.SetBytes(originTask.Data, "id", originTask.TaskID)
 	if err != nil {
 		return nil, errors.Wrap(err, "set id failed")

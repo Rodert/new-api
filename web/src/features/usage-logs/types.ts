@@ -119,6 +119,7 @@ export interface LogOtherData {
     multi_key_index?: number
     use_channel?: number[]
     local_count_tokens?: boolean
+    upstream_error?: string
     usage_billing_path?: UsageBillingPath | string
     channel_affinity?: ChannelAffinityInfo
     // Top-up audit fields (type=1, admin only)
@@ -270,6 +271,7 @@ export interface MidjourneyLog {
   finish_time?: number // milliseconds
   start_time?: number // milliseconds
   fail_reason?: string
+  admin_fail_reason?: string
   progress: string
   prompt: string
   prompt_en?: string

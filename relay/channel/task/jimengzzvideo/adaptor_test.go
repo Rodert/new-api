@@ -195,3 +195,19 @@ func TestEstimateBillingUsesSecondsOnlyForPerSecondModels(t *testing.T) {
 	assert.Equal(t, map[string]float64{"seconds": 15}, adaptor.EstimateBilling(ctx, &relaycommon.RelayInfo{OriginModelName: "kling-video-v3"}))
 	assert.Nil(t, adaptor.EstimateBilling(ctx, &relaycommon.RelayInfo{OriginModelName: "video-ds-2.0"}))
 }
+
+func TestConvertToOpenAIVideoHidesUpstreamFailureResponse(t *testing.T) {
+	adaptor := &TaskAdaptor{}
+	data, err := adaptor.ConvertToOpenAIVideo(&model.Task{
+		TaskID:     "task_public",
+		Status:     model.TaskStatusFailure,
+		Progress:   "100%",
+		CreatedAt:  100,
+		FinishTime: 200,
+		Properties: model.Properties{OriginModelName: "seedance2.5"},
+		Data:       []byte(`{"error":{"message":"https://upstream.example/internal"}}`),
+	})
+	require.NoError(t, err)
+	assert.NotContains(t, string(data), "upstream.example")
+	assert.JSONEq(t, `{"id":"task_public","task_id":"task_public","object":"video","model":"seedance2.5","status":"failed","progress":100,"created_at":100,"completed_at":200,"error":{"message":"Upstream task failed. Please retry later or contact an administrator.","code":"upstream_task_failed"}}`, string(data))
+}
