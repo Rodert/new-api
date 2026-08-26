@@ -191,7 +191,7 @@ export const CHANNEL_TYPE_CONFIGS: Record<number, ChannelTypeConfig> = {
     hints: {
       baseUrl: 'Default: https://api2.chongplus.plus',
       key: 'ChongPlus API Key',
-      models: 'grok-imagine-video',
+      models: 'grok-imagine-video,grok-imagine-video-1.5',
     },
   },
 }

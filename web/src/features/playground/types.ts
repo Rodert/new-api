@@ -158,6 +158,7 @@ export interface VideoGenerationRequest {
   resolution?: string
   image?: string
   images?: string[]
+  reference_images?: string[]
   videos?: string[]
   audios?: string[]
   duration: number

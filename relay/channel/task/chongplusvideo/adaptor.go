@@ -23,17 +23,26 @@ import (
 	"github.com/tidwall/sjson"
 )
 
-var ModelList = []string{"grok-imagine-video"}
+var ModelList = []string{"grok-imagine-video", "grok-imagine-video-1.5"}
 
 const ChannelName = "chongplus-video"
 
+var grokImagineVideo15SupportedSeconds = map[int]struct{}{
+	4: {}, 6: {}, 8: {}, 10: {}, 12: {}, 15: {},
+}
+
+type imageReference struct {
+	URL string `json:"url"`
+}
+
 type requestPayload struct {
-	Model       string   `json:"model"`
-	Prompt      string   `json:"prompt"`
-	Seconds     *int     `json:"seconds,omitempty"`
-	AspectRatio string   `json:"aspect_ratio,omitempty"`
-	Resolution  string   `json:"resolution,omitempty"`
-	ImageURLs   []string `json:"image_urls,omitempty"`
+	Model           string           `json:"model"`
+	Prompt          string           `json:"prompt"`
+	Duration        *int             `json:"duration,omitempty"`
+	AspectRatio     string           `json:"aspect_ratio,omitempty"`
+	Resolution      string           `json:"resolution,omitempty"`
+	Image           *imageReference  `json:"image,omitempty"`
+	ReferenceImages []imageReference `json:"reference_images,omitempty"`
 }
 
 type TaskAdaptor struct {
@@ -55,9 +64,47 @@ func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycom
 	if err != nil {
 		return service.TaskErrorWrapperLocal(err, "invalid_request", http.StatusBadRequest)
 	}
-	images := append(append([]string{}, req.ImageURLs...), req.Images...)
-	if len(images) > 0 {
+	if info.UpstreamModelName != "grok-imagine-video-1.5" {
+		images := append(append([]string{}, req.ImageURLs...), req.Images...)
+		if len(images) == 0 && len(req.ReferenceImages) == 0 {
+			return nil
+		}
 		return service.TaskErrorWrapperLocal(errors.New("ChongPlus video does not support reference images"), "invalid_images", http.StatusBadRequest)
+	}
+	seconds := req.Duration
+	if req.Seconds != "" {
+		parsedSeconds, parseErr := strconv.Atoi(req.Seconds)
+		if parseErr != nil {
+			return service.TaskErrorWrapperLocal(errors.New("seconds must be one of: 4, 6, 8, 10, 12, 15"), "invalid_seconds", http.StatusBadRequest)
+		}
+		seconds = parsedSeconds
+	}
+	if seconds != 0 {
+		if _, ok := grokImagineVideo15SupportedSeconds[seconds]; !ok {
+			return service.TaskErrorWrapperLocal(errors.New("seconds must be one of: 4, 6, 8, 10, 12, 15"), "invalid_seconds", http.StatusBadRequest)
+		}
+	}
+	firstFrameImages := firstFrameImages(req)
+	if len(firstFrameImages) > 0 && len(req.ReferenceImages) > 0 {
+		return service.TaskErrorWrapperLocal(errors.New("do not send both a first-frame image and reference_images"), "invalid_images", http.StatusBadRequest)
+	}
+	if len(firstFrameImages) > 1 {
+		return service.TaskErrorWrapperLocal(errors.New("first-frame image supports exactly one item"), "invalid_images", http.StatusBadRequest)
+	}
+	if len(req.ReferenceImages) > 7 {
+		return service.TaskErrorWrapperLocal(errors.New("reference_images supports at most 7 items"), "invalid_images", http.StatusBadRequest)
+	}
+	if len(req.ReferenceImages) > 0 && strings.EqualFold(strings.TrimSpace(requestResolution(req)), "1080p") {
+		return service.TaskErrorWrapperLocal(errors.New("reference_images supports up to 720p resolution"), "invalid_resolution", http.StatusBadRequest)
+	}
+	for _, image := range append(firstFrameImages, req.ReferenceImages...) {
+		if strings.HasPrefix(image, "data:") {
+			continue
+		}
+		parsed, parseErr := url.ParseRequestURI(image)
+		if parseErr != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" {
+			return service.TaskErrorWrapperLocal(errors.New("images must contain public HTTP(S) URLs or data URLs"), "invalid_images", http.StatusBadRequest)
+		}
 	}
 	return nil
 }
@@ -93,11 +140,20 @@ func (a *TaskAdaptor) BuildRequestBody(c *gin.Context, info *relaycommon.RelayIn
 	if err != nil {
 		return nil, err
 	}
-	body := requestPayload{Model: info.UpstreamModelName, Prompt: req.Prompt, AspectRatio: req.AspectRatio, Resolution: req.Resolution}
+	body := requestPayload{Model: info.UpstreamModelName, Prompt: req.Prompt, AspectRatio: req.AspectRatio, Resolution: requestResolution(req)}
+	if info.UpstreamModelName == "grok-imagine-video-1.5" {
+		images := firstFrameImages(req)
+		if len(images) == 1 {
+			body.Image = &imageReference{URL: images[0]}
+		}
+		for _, image := range req.ReferenceImages {
+			body.ReferenceImages = append(body.ReferenceImages, imageReference{URL: image})
+		}
+	}
 	if seconds, err := strconv.Atoi(req.Seconds); err == nil && seconds > 0 {
-		body.Seconds = &seconds
+		body.Duration = &seconds
 	} else if req.Duration > 0 {
-		body.Seconds = &req.Duration
+		body.Duration = &req.Duration
 	}
 	data, err := common.Marshal(body)
 	if err != nil {
@@ -176,4 +232,37 @@ func (a *TaskAdaptor) GetModelList() []string { return ModelList }
 func (a *TaskAdaptor) GetChannelName() string { return ChannelName }
 func (a *TaskAdaptor) ConvertToOpenAIVideo(task *model.Task) ([]byte, error) {
 	return common.Marshal(task.ToOpenAIVideo())
+}
+
+func firstFrameImages(req relaycommon.TaskSubmitReq) []string {
+	images := make([]string, 0, 1+len(req.Images)+len(req.ImageURLs))
+	if image := strings.TrimSpace(req.Image); image != "" {
+		images = append(images, image)
+	}
+	images = append(images, req.Images...)
+	images = append(images, req.ImageURLs...)
+	if image := req.GetInputReferenceURL(); image != "" {
+		images = append(images, image)
+	}
+	uniqueImages := make([]string, 0, len(images))
+	seen := make(map[string]struct{}, len(images))
+	for _, image := range images {
+		image = strings.TrimSpace(image)
+		if image == "" {
+			continue
+		}
+		if _, exists := seen[image]; exists {
+			continue
+		}
+		seen[image] = struct{}{}
+		uniqueImages = append(uniqueImages, image)
+	}
+	return uniqueImages
+}
+
+func requestResolution(req relaycommon.TaskSubmitReq) string {
+	if req.Resolution != "" {
+		return req.Resolution
+	}
+	return req.Size
 }

@@ -50,6 +50,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 
 import { createVideo, getVideoTask, uploadPlaygroundAsset } from '../../api'
 import {
@@ -80,6 +81,10 @@ type LocalMedia = {
   name: string
   url: string
 }
+
+type GrokVideoImageMode = 'first_frame' | 'reference'
+
+const grokImagineVideo15Models = new Set(['grok-imagine-video-1.5'])
 
 const completedStatuses = new Set(['succeeded', 'success', 'completed'])
 const failedStatuses = new Set(['failed', 'error', 'cancelled', 'canceled'])
@@ -118,6 +123,8 @@ const videoResolutionOptionsByModel: Record<string, string[]> = {
   'drama-video-v2-fast': ['480p', '720p'],
   'grok-imagine-video': ['480p', '720p', '1080p'],
   'grok-imagine-video-1.5-preview': ['480p', '720p', '1080p'],
+  'grok-video-1.5': ['480p', '720p', '1080p'],
+  'grok-imagine-video-1.5': ['480p', '720p', '1080p'],
   'kling-video-v3': ['720p', '1080p', '4k'],
   'kling-video-v3-omni': ['720p', '1080p', '4k'],
   'kling-video-v3-turbo': ['720p', '1080p'],
@@ -162,6 +169,8 @@ export function VideoWorkspace({
   const [referenceImages, setReferenceImages] = useState<LocalMedia[]>([])
   const [referenceVideos, setReferenceVideos] = useState<LocalMedia[]>([])
   const [referenceAudio, setReferenceAudio] = useState<LocalMedia[]>([])
+  const [grokVideoImageMode, setGrokVideoImageMode] =
+    useState<GrokVideoImageMode>('first_frame')
   const [ratio, setRatio] = useState('16:9')
   const [duration, setDuration] = useState(15)
   const [resolution, setResolution] = useState('')
@@ -180,12 +189,26 @@ export function VideoWorkspace({
     config.model === 'kling-video-v3-turbo'
   ) {
     durationOptions = klingVideoDurationOptions
-  } else if (config.model === 'grok-video-1.5') {
+  } else if (
+    config.model === 'grok-video-1.5' ||
+    grokImagineVideo15Models.has(config.model)
+  ) {
     durationOptions = grokVideo15DurationOptions
   }
   const mediaLimits = mediaLimitsByModel[config.model] ?? defaultMediaLimits
-  const resolutionOptions =
+  const isGrokImagineVideo15 = grokImagineVideo15Models.has(config.model)
+  const isGrokVideo15ReferenceMode =
+    isGrokImagineVideo15 && grokVideoImageMode === 'reference'
+  const imageLimit = isGrokVideo15ReferenceMode
+    ? 7
+    : isGrokImagineVideo15
+      ? 1
+      : mediaLimits.images
+  const baseResolutionOptions =
     videoResolutionOptionsByModel[config.model] ?? emptyResolutionOptions
+  const resolutionOptions = isGrokVideo15ReferenceMode
+    ? baseResolutionOptions.filter((value) => value !== '1080p')
+    : baseResolutionOptions
   const selectedResolution = resolutionOptions.includes(resolution)
     ? resolution
     : (resolutionOptions[0] ?? '')
@@ -265,6 +288,9 @@ export function VideoWorkspace({
     const [width, height] = getVideoDimensions(metadata.aspectRatio)
     setIsSubmitting(true)
     try {
+      const isGrokImagineVideo15Task = grokImagineVideo15Models.has(
+        metadata.model
+      )
       const response = await createVideo({
         model: metadata.model,
         group: metadata.group,
@@ -275,9 +301,13 @@ export function VideoWorkspace({
         width,
         height,
         ...(metadata.resolution ? { resolution: metadata.resolution } : {}),
-        ...(metadata.referenceImages?.length
-          ? { images: metadata.referenceImages }
-          : {}),
+        ...(isGrokImagineVideo15Task && metadata.referenceImages?.length
+          ? metadata.grokVideoImageMode === 'reference'
+            ? { reference_images: metadata.referenceImages }
+            : { image: metadata.referenceImages[0] }
+          : metadata.referenceImages?.length
+            ? { images: metadata.referenceImages }
+            : {}),
         ...(metadata.referenceVideos?.length
           ? { videos: metadata.referenceVideos }
           : {}),
@@ -302,6 +332,9 @@ export function VideoWorkspace({
       group: config.group,
       model: config.model,
       prompt: prompt.trim(),
+      grokVideoImageMode: isGrokImagineVideo15
+        ? grokVideoImageMode
+        : undefined,
       resolution: selectedResolution,
       referenceAudio: referenceAudio.map((media) => media.url),
       referenceImages: referenceImages.map((media) => media.url),
@@ -320,6 +353,9 @@ export function VideoWorkspace({
     setRatio(task.aspectRatio)
     setDuration(Number(task.seconds))
     setResolution(task.resolution ?? '')
+    if (grokImagineVideo15Models.has(task.model)) {
+      setGrokVideoImageMode(task.grokVideoImageMode ?? 'first_frame')
+    }
     setReferenceImages(toLocalMedia(task.referenceImages))
     setReferenceVideos(toLocalMedia(task.referenceVideos))
     setReferenceAudio(toLocalMedia(task.referenceAudio))
@@ -328,6 +364,10 @@ export function VideoWorkspace({
       group: task.group,
       model: task.model,
       prompt: task.prompt,
+      grokVideoImageMode:
+        grokImagineVideo15Models.has(task.model)
+          ? (task.grokVideoImageMode ?? 'first_frame')
+          : undefined,
       resolution: task.resolution,
       referenceAudio: task.referenceAudio,
       referenceImages: task.referenceImages,
@@ -564,15 +604,46 @@ export function VideoWorkspace({
               ) : null}
             </div>
 
+            {isGrokImagineVideo15 ? (
+              <div className='grid gap-1.5'>
+                <Label className='text-xs'>{t('Image mode')}</Label>
+                <ToggleGroup
+                  disabled={isSubmitting}
+                  onValueChange={(value) => {
+                    const mode = value.find(
+                      (item) => item !== grokVideoImageMode
+                    ) as GrokVideoImageMode | undefined
+                    if (!mode) return
+                    setGrokVideoImageMode(mode)
+                    if (mode === 'first_frame') {
+                      setReferenceImages((current) => current.slice(0, 1))
+                    }
+                  }}
+                  size='sm'
+                  value={[grokVideoImageMode]}
+                  variant='outline'
+                >
+                  <ToggleGroupItem value='first_frame'>
+                    {t('First frame')}
+                  </ToggleGroupItem>
+                  <ToggleGroupItem value='reference'>
+                    {t('Reference images')}
+                  </ToggleGroupItem>
+                </ToggleGroup>
+              </div>
+            ) : null}
+
             {renderMediaCard(
-              t('Reference images'),
+              isGrokImagineVideo15 && grokVideoImageMode === 'first_frame'
+                ? t('First frame image')
+                : t('Reference images'),
               t('Optional reference media'),
               ImagePlusIcon,
               imageInputRef,
               'image/png,image/jpeg,image/webp',
               'image',
               referenceImages,
-              mediaLimits.images,
+              imageLimit,
               setReferenceImages,
               true
             )}

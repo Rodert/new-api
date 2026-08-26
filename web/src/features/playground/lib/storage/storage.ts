@@ -98,6 +98,7 @@ export type VideoWorkspaceTask = VideoTaskResponse & {
   seconds: string
   resolution?: string
   qualityPreset?: string
+  grokVideoImageMode?: 'first_frame' | 'reference'
   referenceImages?: string[]
   referenceVideos?: string[]
   referenceAudio?: string[]
@@ -122,6 +123,7 @@ export type VideoWorkspaceMetadata = {
   n: number
   prompt: string
   resolution?: string
+  grokVideoImageMode?: 'first_frame' | 'reference'
   referenceAudio?: string[]
   referenceImages?: string[]
   referenceVideos?: string[]
@@ -858,6 +860,8 @@ export function saveVideoWorkspaceTask(
           metadata?.resolution ??
           existingTask?.resolution ??
           videoConfig.resolution,
+        grokVideoImageMode:
+          metadata?.grokVideoImageMode ?? existingTask?.grokVideoImageMode,
         referenceImages:
           metadata?.referenceImages ?? existingTask?.referenceImages,
         referenceVideos:

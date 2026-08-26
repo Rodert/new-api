@@ -183,6 +183,9 @@ func validateMultipartTaskRequest(c *gin.Context, info *RelayInfo, action string
 	if images := formData["images"]; len(images) > 0 {
 		req.Images = images
 	}
+	if referenceImages := formData["reference_images"]; len(referenceImages) > 0 {
+		req.ReferenceImages = referenceImages
+	}
 	if videos := formData["videos"]; len(videos) > 0 {
 		req.Videos = videos
 	}
