@@ -101,6 +101,7 @@ export function getChannelTypeIcon(type: number): string {
     51: 'Jimeng', // Jimeng
     1000: 'Jimeng', // JimengZZVideo
     1001: 'XAI', // GrokVideo
+    1002: 'XAI', // ChongPlusVideo
     52: 'Vidu', // Vidu
     36: 'Suno', // SunoAPI
     55: 'OpenAI', // Sora

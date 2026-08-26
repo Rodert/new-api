@@ -24,6 +24,7 @@ For commercial licensing, please contact support@quantumnous.com
 export const CHANNEL_TYPE_NEW_API = 60
 export const CHANNEL_TYPE_JIMENG_ZZ_VIDEO = 1000
 export const CHANNEL_TYPE_GROK_VIDEO = 1001
+export const CHANNEL_TYPE_CHONGPLUS_VIDEO = 1002
 
 export const CHANNEL_TYPES = {
   0: 'Unknown',
@@ -85,12 +86,13 @@ export const CHANNEL_TYPES = {
   60: 'New API',
   1000: 'JimengZZVideo',
   1001: 'GrokVideo',
+  1002: 'ChongPlusVideo',
 } as const
 
 const CHANNEL_TYPE_DISPLAY_ORDER: number[] = [
   1, 14, 33, 24, 43, 3, 41, 48, 60, 58, 42, 34, 20, 4, 40, 27, 25, 17, 26, 15,
   46, 23, 18, 45, 31, 35, 49, 19, 47, 37, 38, 39, 11, 8, 57, 59, 22, 21, 44, 2,
-  5, 36, 50, 51, 1000, 1001, 52, 53, 54, 55, 56,
+  5, 36, 50, 51, 1000, 1001, 1002, 52, 53, 54, 55, 56,
 ]
 
 export const CHANNEL_TYPE_OPTIONS: { value: number; label: string }[] = (() => {

@@ -481,7 +481,7 @@ func validateChannel(channel *model.Channel, isAdd bool) error {
 		return fmt.Errorf("渠道额外设置[channel setting] 格式错误：%s", err.Error())
 	}
 
-	if (channel.Type == constant.ChannelTypeNewAPI || channel.Type == constant.ChannelTypeJimengZZVideo || channel.Type == constant.ChannelTypeGrokVideo) && strings.TrimSpace(channel.GetBaseURL()) == "" {
+	if (channel.Type == constant.ChannelTypeNewAPI || channel.Type == constant.ChannelTypeJimengZZVideo || channel.Type == constant.ChannelTypeGrokVideo || channel.Type == constant.ChannelTypeChongPlusVideo) && strings.TrimSpace(channel.GetBaseURL()) == "" {
 		return fmt.Errorf("%s channel base URL cannot be empty", constant.GetChannelTypeName(channel.Type))
 	}
 

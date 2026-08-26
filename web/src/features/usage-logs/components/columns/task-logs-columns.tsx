@@ -248,9 +248,8 @@ export function useTaskLogsColumns(isAdmin: boolean): ColumnDef<TaskLog>[] {
           log.action === TASK_ACTIONS.REFERENCE_GENERATE ||
           log.action === TASK_ACTIONS.REMIX_GENERATE
         const isSuccess = status === TASK_STATUS.SUCCESS
-        const isUrl = failReason?.startsWith('http')
 
-        if (isSuccess && isVideoTask && isUrl) {
+        if (isAdmin && isSuccess && isVideoTask && log.result_url) {
           const videoUrl = `/v1/videos/${log.task_id}/content`
           return (
             <a
@@ -258,6 +257,7 @@ export function useTaskLogsColumns(isAdmin: boolean): ColumnDef<TaskLog>[] {
               target='_blank'
               rel='noopener noreferrer'
               className='text-foreground text-xs hover:underline'
+              title={log.result_url}
             >
               {t('Click to preview video')}
             </a>

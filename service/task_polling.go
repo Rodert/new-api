@@ -554,6 +554,15 @@ func updateVideoSingleTask(ctx context.Context, adaptor TaskPollingAdaptor, ch *
 			// No URL from adaptor — construct proxy URL using public task ID
 			task.PrivateData.ResultURL = taskcommon.BuildProxyURL(task.TaskID)
 		}
+		if ch.Type == constant.ChannelTypeChongPlusVideo {
+			url, err := persistChongPlusVideoToR2(ctx, task, baseURL, key, proxy)
+			if err != nil {
+				logger.LogWarn(ctx, fmt.Sprintf("failed to persist ChongPlus video task %s to R2: %s", task.TaskID, err.Error()))
+			} else {
+				task.PrivateData.ResultURL = url
+				task.PrivateData.ResultPersisted = true
+			}
+		}
 		shouldSettle = true
 	case model.TaskStatusFailure:
 		logger.LogJson(ctx, fmt.Sprintf("Task %s failed", taskId), task)

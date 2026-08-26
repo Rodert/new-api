@@ -107,6 +107,20 @@ func TestVideoPollingQueriesExcludeImageTasks(t *testing.T) {
 	assert.True(t, HasPendingImageTasks())
 }
 
+func TestGetTaskByTaskIDFindsTaskWithoutUserScope(t *testing.T) {
+	truncateTables(t)
+	insertTask(t, &Task{TaskID: "task_admin_preview", UserId: 42, Platform: "sora", Status: TaskStatusSuccess, Progress: "100%"})
+
+	task, exists, err := GetTaskByTaskID("task_admin_preview")
+	require.NoError(t, err)
+	require.True(t, exists)
+	assert.Equal(t, 42, task.UserId)
+
+	_, exists, err = GetTaskByTaskID("task_missing")
+	require.NoError(t, err)
+	assert.False(t, exists)
+}
+
 func insertTask(t *testing.T, task *Task) {
 	t.Helper()
 	task.CreatedAt = time.Now().Unix()

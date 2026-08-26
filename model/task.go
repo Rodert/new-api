@@ -101,9 +101,10 @@ func (m Properties) Value() (driver.Value, error) {
 }
 
 type TaskPrivateData struct {
-	Key            string `json:"key,omitempty"`
-	UpstreamTaskID string `json:"upstream_task_id,omitempty"` // 上游真实 task ID
-	ResultURL      string `json:"result_url,omitempty"`       // 任务成功后的结果 URL（视频地址等）
+	Key                string `json:"key,omitempty"`
+	UpstreamTaskID     string `json:"upstream_task_id,omitempty"` // 上游真实 task ID
+	ResultURL          string `json:"result_url,omitempty"`       // 任务成功后的结果 URL（视频地址等）
+	ResultPersisted    bool   `json:"result_persisted,omitempty"` // 结果已持久化到对象存储，不再依赖上游内容接口
 	UpstreamFailReason string `json:"upstream_fail_reason,omitempty"` // 上游原始失败信息，仅管理员任务日志展示
 	// 计费上下文：用于异步退款/差额结算（轮询阶段读取）
 	BillingSource  string              `json:"billing_source,omitempty"`  // "wallet" 或 "subscription"
@@ -183,7 +184,8 @@ func InitTask(platform constant.TaskPlatform, relayInfo *commonRelay.RelayInfo) 
 		if relayInfo.ChannelMeta.ChannelType == constant.ChannelTypeGemini ||
 			relayInfo.ChannelMeta.ChannelType == constant.ChannelTypeVertexAi ||
 			relayInfo.ChannelMeta.ChannelType == constant.ChannelTypeJimengZZVideo ||
-			relayInfo.ChannelMeta.ChannelType == constant.ChannelTypeGrokVideo {
+			relayInfo.ChannelMeta.ChannelType == constant.ChannelTypeGrokVideo ||
+			relayInfo.ChannelMeta.ChannelType == constant.ChannelTypeChongPlusVideo {
 			privateData.Key = relayInfo.ChannelMeta.ApiKey
 		}
 		if relayInfo.UpstreamModelName != "" {
@@ -385,6 +387,19 @@ func GetByTaskId(userId int, taskId string) (*Task, bool, error) {
 		return nil, false, err
 	}
 	return task, exist, err
+}
+
+func GetTaskByTaskID(taskID string) (*Task, bool, error) {
+	if taskID == "" {
+		return nil, false, nil
+	}
+	var task *Task
+	err := DB.Where("task_id = ?", taskID).First(&task).Error
+	exists, err := RecordExist(err)
+	if err != nil {
+		return nil, false, err
+	}
+	return task, exists, nil
 }
 
 func GetByTaskIds(userId int, taskIds []any) ([]*Task, error) {

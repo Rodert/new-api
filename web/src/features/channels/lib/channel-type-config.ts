@@ -184,6 +184,16 @@ export const CHANNEL_TYPE_CONFIGS: Record<number, ChannelTypeConfig> = {
       models: 'grok-image-video,grok-video-1.5',
     },
   },
+  1002: {
+    id: 1002,
+    name: CHANNEL_TYPES[1002],
+    icon: 'XAI',
+    hints: {
+      baseUrl: 'Default: https://api2.chongplus.plus',
+      key: 'ChongPlus API Key',
+      models: 'grok-imagine-video',
+    },
+  },
 }
 
 /**

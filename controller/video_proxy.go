@@ -38,7 +38,14 @@ func VideoProxy(c *gin.Context) {
 	}
 
 	userID := c.GetInt("id")
-	task, exists, err := model.GetByTaskId(userID, taskID)
+	var task *model.Task
+	var exists bool
+	var err error
+	if model.IsAdmin(userID) {
+		task, exists, err = model.GetTaskByTaskID(taskID)
+	} else {
+		task, exists, err = model.GetByTaskId(userID, taskID)
+	}
 	if err != nil {
 		logger.LogError(c.Request.Context(), fmt.Sprintf("Failed to query task %s: %s", taskID, err.Error()))
 		videoProxyError(c, http.StatusInternalServerError, "server_error", "Failed to query task")
@@ -117,7 +124,11 @@ func VideoProxy(c *gin.Context) {
 			videoProxyError(c, http.StatusBadGateway, "server_error", "Failed to resolve Vertex video URL")
 			return
 		}
-	case constant.ChannelTypeOpenAI, constant.ChannelTypeSora, constant.ChannelTypeJimengZZVideo:
+	case constant.ChannelTypeOpenAI, constant.ChannelTypeSora, constant.ChannelTypeJimengZZVideo, constant.ChannelTypeChongPlusVideo:
+		if channel.Type == constant.ChannelTypeChongPlusVideo && task.PrivateData.ResultPersisted {
+			videoURL = task.GetResultURL()
+			break
+		}
 		videoURL = fmt.Sprintf("%s/v1/videos/%s/content", baseURL, task.GetUpstreamTaskID())
 		key := task.PrivateData.Key
 		if key == "" {
