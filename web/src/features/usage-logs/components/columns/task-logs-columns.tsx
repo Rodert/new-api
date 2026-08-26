@@ -21,11 +21,13 @@ import { Music } from 'lucide-react'
 /* eslint-disable react-refresh/only-export-components */
 import { useState, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
 
 import { StatusBadge } from '@/components/status-badge'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { getUserAvatarFallback, getUserAvatarStyle } from '@/lib/avatar'
 import { formatTimestampToDate } from '@/lib/format'
+import { api } from '@/lib/api'
 import { cn } from '@/lib/utils'
 
 import { TASK_ACTIONS, TASK_STATUS } from '../../constants'
@@ -258,6 +260,31 @@ export function useTaskLogsColumns(isAdmin: boolean): ColumnDef<TaskLog>[] {
               rel='noopener noreferrer'
               className='text-foreground text-xs hover:underline'
               title={log.result_url}
+              onClick={(event) => {
+                event.preventDefault()
+                const previewWindow = window.open('', '_blank')
+                if (!previewWindow) {
+                  toast.error(t('Request failed'))
+                  return
+                }
+                previewWindow.opener = null
+
+                void api
+                  .get(videoUrl, {
+                    responseType: 'blob',
+                    skipErrorHandler: true,
+                    disableDuplicate: true,
+                  })
+                  .then((response) => {
+                    const objectURL = URL.createObjectURL(response.data as Blob)
+                    previewWindow.location.href = objectURL
+                    window.setTimeout(() => URL.revokeObjectURL(objectURL), 5 * 60 * 1000)
+                  })
+                  .catch(() => {
+                    previewWindow.close()
+                    toast.error(t('Request failed'))
+                  })
+              }}
             >
               {t('Click to preview video')}
             </a>
