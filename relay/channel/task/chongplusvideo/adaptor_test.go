@@ -8,6 +8,7 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	"github.com/QuantumNous/new-api/setting/ratio_setting"
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
@@ -32,6 +33,23 @@ func TestBuildRequestUsesChongPlusProtocol(t *testing.T) {
 	require.NoError(t, common.Unmarshal(data, &request))
 	require.NotNil(t, request.Duration)
 	assert.Equal(t, 8, *request.Duration)
+}
+
+func TestEstimateBillingRespectsVideoBillingMode(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	ctx.Set("task_request", relaycommon.TaskSubmitReq{Seconds: "8"})
+	adaptor := &TaskAdaptor{}
+	info := &relaycommon.RelayInfo{OriginModelName: "grok-imagine-video-1.5"}
+
+	require.NoError(t, ratio_setting.UpdateVideoBillingModeByJSONString(`{}`))
+	t.Cleanup(func() {
+		require.NoError(t, ratio_setting.UpdateVideoBillingModeByJSONString(`{}`))
+	})
+	assert.Nil(t, adaptor.EstimateBilling(ctx, info))
+
+	require.NoError(t, ratio_setting.UpdateVideoBillingModeByJSONString(`{"grok-imagine-video-1.5":"per_second"}`))
+	assert.Equal(t, map[string]float64{"seconds": 8}, adaptor.EstimateBilling(ctx, info))
 }
 
 func TestBuildGrokImagineVideo15FirstFrameRequest(t *testing.T) {
