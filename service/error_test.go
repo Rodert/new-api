@@ -150,6 +150,44 @@ func TestRelayErrorHandlerKeepsInvalidJSONBodyInDebugLog(t *testing.T) {
 	require.Contains(t, logBuffer.String(), body)
 }
 
+func TestTaskErrorFromAPIErrorMarksOnlyActionableBillingErrorsLocal(t *testing.T) {
+	tests := []struct {
+		name       string
+		code       types.ErrorCode
+		statusCode int
+		wantLocal  bool
+	}{
+		{
+			name:       "insufficient user quota",
+			code:       types.ErrorCodeInsufficientUserQuota,
+			statusCode: http.StatusForbidden,
+			wantLocal:  true,
+		},
+		{
+			name:       "billing database failure",
+			code:       types.ErrorCodeUpdateDataError,
+			statusCode: http.StatusInternalServerError,
+			wantLocal:  false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			apiErr := types.NewErrorWithStatusCode(
+				fmt.Errorf("用户额度不足, 剩余额度: $0.000000"),
+				tt.code,
+				tt.statusCode,
+			)
+
+			taskErr := TaskErrorFromAPIError(apiErr)
+
+			require.Equal(t, tt.wantLocal, taskErr.LocalError)
+			require.Equal(t, "用户额度不足, 剩余额度: $0.000000", taskErr.Message)
+			require.Equal(t, tt.statusCode, taskErr.StatusCode)
+		})
+	}
+}
+
 func withDebugEnabled(t *testing.T, enabled bool) {
 	t.Helper()
 

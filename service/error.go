@@ -216,15 +216,19 @@ func TaskErrorWrapper(err error, code string, statusCode int) *taskdto.TaskError
 	return taskError
 }
 
-// TaskErrorFromAPIError 将 PreConsumeBilling 返回的 NewAPIError 转换为 TaskError。
+// TaskErrorFromAPIError converts a local billing failure into a task error.
 func TaskErrorFromAPIError(apiErr *types.NewAPIError) *taskdto.TaskError {
 	if apiErr == nil {
 		return nil
 	}
+	localError := apiErr.GetErrorCode() == types.ErrorCodeInsufficientUserQuota ||
+		apiErr.GetErrorCode() == types.ErrorCodePreConsumeTokenQuotaFailed ||
+		apiErr.GetErrorCode() == types.ErrorCodeModelPriceError
 	return &taskdto.TaskError{
 		Code:       string(apiErr.GetErrorCode()),
 		Message:    apiErr.Err.Error(),
 		StatusCode: apiErr.StatusCode,
+		LocalError: localError,
 		Error:      apiErr.Err,
 	}
 }
