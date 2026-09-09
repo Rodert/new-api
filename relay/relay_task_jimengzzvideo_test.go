@@ -2,6 +2,7 @@ package relay
 
 import (
 	"testing"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/stretchr/testify/assert"
@@ -28,4 +29,20 @@ func TestRewriteJimengZZVideoTaskResponseKeepsUpstreamResult(t *testing.T) {
 		"video_url":  "https://cdn.example/video.mp4",
 		"resultUrls": []any{"https://cdn.example/video.mp4"},
 	}, payload["result"])
+}
+
+func TestAllowRealtimeTaskFetchUsesPerTaskCooldown(t *testing.T) {
+	previousRedisEnabled := common.RedisEnabled
+	common.RedisEnabled = false
+	t.Cleanup(func() {
+		common.RedisEnabled = previousRedisEnabled
+	})
+
+	realtimeTaskFetchFallback.Lock()
+	realtimeTaskFetchFallback.until = make(map[string]time.Time)
+	realtimeTaskFetchFallback.Unlock()
+
+	assert.True(t, allowRealtimeTaskFetch("task_one"))
+	assert.False(t, allowRealtimeTaskFetch("task_one"))
+	assert.True(t, allowRealtimeTaskFetch("task_two"))
 }

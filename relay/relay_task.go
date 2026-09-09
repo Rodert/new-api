@@ -2,12 +2,15 @@ package relay
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
@@ -29,6 +32,39 @@ type TaskSubmitResult struct {
 	Platform       constant.TaskPlatform
 	Quota          int
 	//PerCallPrice   types.PriceData
+}
+
+const realtimeTaskFetchCooldown = 3 * time.Second
+
+var realtimeTaskFetchFallback = struct {
+	sync.Mutex
+	until map[string]time.Time
+}{until: make(map[string]time.Time)}
+
+func allowRealtimeTaskFetch(taskID string) bool {
+	if common.RedisEnabled && common.RDB != nil {
+		allowed, err := common.RDB.SetNX(context.Background(), "task:realtime-fetch:"+taskID, "1", realtimeTaskFetchCooldown).Result()
+		if err == nil {
+			return allowed
+		}
+		common.SysError(fmt.Sprintf("realtime task fetch cooldown Redis error for %s: %s", taskID, err.Error()))
+	}
+
+	now := time.Now()
+	realtimeTaskFetchFallback.Lock()
+	defer realtimeTaskFetchFallback.Unlock()
+	if until, exists := realtimeTaskFetchFallback.until[taskID]; exists && now.Before(until) {
+		return false
+	}
+	if len(realtimeTaskFetchFallback.until) >= 1024 {
+		for key, until := range realtimeTaskFetchFallback.until {
+			if !now.Before(until) {
+				delete(realtimeTaskFetchFallback.until, key)
+			}
+		}
+	}
+	realtimeTaskFetchFallback.until[taskID] = now.Add(realtimeTaskFetchCooldown)
+	return true
 }
 
 // ResolveOriginTask 处理基于已有任务的提交（remix / continuation）：
@@ -482,6 +518,9 @@ func tryRealtimeFetch(task *model.Task, isOpenAIVideoAPI bool) []byte {
 	if adaptor == nil {
 		return nil
 	}
+	if !allowRealtimeTaskFetch(task.TaskID) {
+		return nil
+	}
 
 	key := channelModel.Key
 	if task.PrivateData.Key != "" {
@@ -516,8 +555,15 @@ func tryRealtimeFetch(task *model.Task, isOpenAIVideoAPI bool) []byte {
 	if ti.Progress != "" {
 		task.Progress = ti.Progress
 	}
+	isTerminal := task.Status == model.TaskStatusSuccess || task.Status == model.TaskStatusFailure
 	if task.Status == model.TaskStatusFailure {
 		service.SetTaskUpstreamFailure(task, ti.Reason)
+	}
+	if isTerminal {
+		task.Progress = taskcommon.ProgressComplete
+		if task.FinishTime == 0 {
+			task.FinishTime = time.Now().Unix()
+		}
 	}
 	if strings.HasPrefix(ti.Url, "data:") {
 		// data: URI — kept in Data, not ResultURL
@@ -529,7 +575,18 @@ func tryRealtimeFetch(task *model.Task, isOpenAIVideoAPI bool) []byte {
 	}
 
 	if !snap.Equal(task.Snapshot()) {
-		_, _ = task.UpdateWithStatus(snap.Status)
+		won, updateErr := task.UpdateWithStatus(snap.Status)
+		if updateErr != nil {
+			common.SysError(fmt.Sprintf("realtime task update failed for %s: %s", task.TaskID, updateErr.Error()))
+			return nil
+		}
+		if won && isTerminal {
+			if task.Status == model.TaskStatusFailure {
+				service.RefundTaskQuota(context.Background(), task, task.FailReason)
+			} else {
+				service.SettleTaskBillingOnComplete(context.Background(), adaptor, task, ti)
+			}
+		}
 	}
 	if task.Status == model.TaskStatusFailure {
 		return nil

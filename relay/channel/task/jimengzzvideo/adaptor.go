@@ -112,9 +112,12 @@ func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycom
 			return service.TaskErrorWrapperLocal(fmt.Errorf("seconds must be between %d and %d", capabilities.MinSeconds, capabilities.MaxSeconds), "invalid_seconds", http.StatusBadRequest)
 		}
 	}
-	if len(capabilities.Resolutions) > 0 && req.Resolution != "" {
+	if len(capabilities.Resolutions) > 0 {
+		if req.Resolution == "" {
+			return service.TaskErrorWrapperLocal(fmt.Errorf("resolution is required for %s", req.Model), "invalid_resolution", http.StatusBadRequest)
+		}
 		if _, ok := capabilities.Resolutions[req.Resolution]; !ok {
-			return service.TaskErrorWrapperLocal(errors.New("resolution must be one of: 480p, 720p"), "invalid_resolution", http.StatusBadRequest)
+			return service.TaskErrorWrapperLocal(fmt.Errorf("unsupported resolution %q for %s", req.Resolution, req.Model), "invalid_resolution", http.StatusBadRequest)
 		}
 	}
 	return nil

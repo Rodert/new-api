@@ -56,6 +56,18 @@ func TestBuildRequestBodyUsesJimengZZVideoProtocol(t *testing.T) {
 	assert.Contains(t, string(data), `"resolution":"720p"`)
 }
 
+func TestValidateRequestRequiresKlingV3Resolution(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/videos", strings.NewReader(`{"model":"kling-video-v3","prompt":"A cat","seconds":"15"}`))
+	ctx.Request.Header.Set("Content-Type", "application/json")
+
+	taskErr := (&TaskAdaptor{}).ValidateRequestAndSetAction(ctx, &relaycommon.RelayInfo{TaskRelayInfo: &relaycommon.TaskRelayInfo{}})
+	require.NotNil(t, taskErr)
+	assert.Equal(t, "invalid_resolution", taskErr.Code)
+	assert.Equal(t, "resolution is required for kling-video-v3", taskErr.Message)
+}
+
 func TestDoResponseKeepsUpstreamIDPrivate(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	writer := httptest.NewRecorder()
