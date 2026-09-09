@@ -280,14 +280,32 @@ func TestTransientTaskPollingResponseRecognizesRetryablePayload(t *testing.T) {
 	assert.False(t, isTransientTaskPollingResponse(http.StatusUnprocessableEntity, []byte(`{"error":{"retryable":false}}`)))
 }
 
-func TestSetTaskUpstreamFailureHidesRawReasonFromUsers(t *testing.T) {
+func TestSetTaskUpstreamFailureSanitizesReasonForUsers(t *testing.T) {
 	task := &model.Task{}
-	rawReason := `{"zone":"upstream.example","ray_id":"abc"}`
+	rawReason := `request to https://upstream.example/v1/tasks?token=secret failed for 203.0.113.10; api_key=abc`
 
 	SetTaskUpstreamFailure(task, rawReason)
 
-	assert.Equal(t, userVisibleUpstreamTaskFailure, task.FailReason)
+	assert.Equal(t, "request to *** failed for ***; api_key=***", task.FailReason)
 	assert.Equal(t, rawReason, task.PrivateData.UpstreamFailReason)
+}
+
+func TestSetTaskUpstreamFailureShowsSafeValidationReason(t *testing.T) {
+	tests := []string{
+		"extra.resolution is required",
+		"seconds must be one of: 6, 8, 10, 12, 15",
+	}
+
+	for _, reason := range tests {
+		t.Run(reason, func(t *testing.T) {
+			task := &model.Task{}
+
+			SetTaskUpstreamFailure(task, reason)
+
+			assert.Equal(t, reason, task.FailReason)
+			assert.Equal(t, reason, task.PrivateData.UpstreamFailReason)
+		})
+	}
 }
 
 func TestUpdateVideoTasksDefaultSleepDoesNotBlockOtherChannels(t *testing.T) {

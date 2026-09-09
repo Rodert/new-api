@@ -217,9 +217,10 @@ func TestConvertToOpenAIVideoHidesUpstreamFailureResponse(t *testing.T) {
 		CreatedAt:  100,
 		FinishTime: 200,
 		Properties: model.Properties{OriginModelName: "seedance2.5"},
+		FailReason: "extra.resolution is required",
 		Data:       []byte(`{"error":{"message":"https://upstream.example/internal"}}`),
 	})
 	require.NoError(t, err)
 	assert.NotContains(t, string(data), "upstream.example")
-	assert.JSONEq(t, `{"id":"task_public","task_id":"task_public","object":"video","model":"seedance2.5","status":"failed","progress":100,"created_at":100,"completed_at":200,"error":{"message":"Upstream task failed. Please retry later or contact an administrator.","code":"upstream_task_failed"}}`, string(data))
+	assert.JSONEq(t, `{"id":"task_public","task_id":"task_public","object":"video","model":"seedance2.5","status":"failed","progress":100,"created_at":100,"completed_at":200,"error":{"message":"extra.resolution is required","code":"upstream_task_failed"}}`, string(data))
 }

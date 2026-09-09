@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -623,12 +624,32 @@ func updateVideoSingleTask(ctx context.Context, adaptor TaskPollingAdaptor, ch *
 
 const userVisibleUpstreamTaskFailure = "上游任务执行失败，请稍后重试或联系管理员"
 
-// SetTaskUpstreamFailure keeps the raw provider response out of user-visible task fields.
+var (
+	upstreamURLPattern       = regexp.MustCompile(`(?i)https?://[^\s"'<>]+`)
+	upstreamDomainPattern    = regexp.MustCompile(`(?i)\b(?:[a-z0-9-]+\.)+[a-z]{2,}\b`)
+	upstreamIPv4Pattern      = regexp.MustCompile(`\b(?:\d{1,3}\.){3}\d{1,3}\b`)
+	upstreamBearerToken      = regexp.MustCompile(`(?i)\bbearer\s+[^\s,;]+`)
+	upstreamCredentialValues = regexp.MustCompile(`(?i)\b(api[_-]?key|token|secret|password)=([^\s&]+)`)
+)
+
+// SetTaskUpstreamFailure keeps the raw provider response for administrators
+// while returning a sanitized, actionable error to the task owner.
 func SetTaskUpstreamFailure(task *model.Task, upstreamReason string) {
-	if reason := strings.TrimSpace(upstreamReason); reason != "" {
+	reason := strings.TrimSpace(upstreamReason)
+	if reason != "" {
 		task.PrivateData.UpstreamFailReason = reason
+		task.FailReason = sanitizeTaskUpstreamFailure(reason)
+		return
 	}
 	task.FailReason = userVisibleUpstreamTaskFailure
+}
+
+func sanitizeTaskUpstreamFailure(reason string) string {
+	sanitized := upstreamURLPattern.ReplaceAllString(reason, "***")
+	sanitized = upstreamDomainPattern.ReplaceAllString(sanitized, "***")
+	sanitized = upstreamIPv4Pattern.ReplaceAllString(sanitized, "***")
+	sanitized = upstreamBearerToken.ReplaceAllString(sanitized, "Bearer ***")
+	return upstreamCredentialValues.ReplaceAllString(sanitized, "$1=***")
 }
 
 func isTransientTaskPollingResponse(statusCode int, body []byte) bool {
