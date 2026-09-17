@@ -389,7 +389,7 @@ func processChannelError(c *gin.Context, channelError types.ChannelError, err *t
 		other["channel_name"] = c.GetString("channel_name")
 		other["channel_type"] = c.GetInt("channel_type")
 		adminInfo := make(map[string]interface{})
-		adminInfo["upstream_error"] = err.MaskSensitiveErrorWithStatusCode()
+		adminInfo["upstream_error"] = err.ErrorWithStatusCode()
 		adminInfo["use_channel"] = c.GetStringSlice("use_channel")
 		isMultiKey := common.GetContextKeyBool(c, constant.ContextKeyChannelIsMultiKey)
 		if isMultiKey {
@@ -403,7 +403,7 @@ func processChannelError(c *gin.Context, channelError types.ChannelError, err *t
 			startTime = time.Now()
 		}
 		useTimeSeconds := int(time.Since(startTime).Seconds())
-		model.RecordErrorLog(c, userId, channelId, modelName, tokenName, "上游服务请求失败，请稍后重试或联系管理员", tokenId, useTimeSeconds, common.GetContextKeyBool(c, constant.ContextKeyIsStream), userGroup, other)
+		model.RecordErrorLog(c, userId, channelId, modelName, tokenName, err.MaskSensitiveErrorWithStatusCode(), tokenId, useTimeSeconds, common.GetContextKeyBool(c, constant.ContextKeyIsStream), userGroup, other)
 	}
 
 }
@@ -612,12 +612,12 @@ func RelayTask(c *gin.Context) {
 	}
 }
 
-// respondTaskError 统一输出 Task 错误响应（含 429 限流提示改写）
+// respondTaskError returns upstream task errors after sensitive values are masked.
 func respondTaskError(c *gin.Context, taskErr *taskdto.TaskError) {
 	if taskErr.StatusCode == http.StatusTooManyRequests {
 		taskErr.Message = "当前分组上游负载已饱和，请稍后再试"
 	} else if !taskErr.LocalError {
-		taskErr.Message = "上游服务请求失败，请稍后重试或联系管理员"
+		taskErr.Message = common.MaskSensitiveInfo(taskErr.Message)
 	}
 	c.JSON(taskErr.StatusCode, taskErr)
 }

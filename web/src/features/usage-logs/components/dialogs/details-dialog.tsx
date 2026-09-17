@@ -489,6 +489,7 @@ export function DetailsDialog(props: DetailsDialogProps) {
   const isConsume = props.log.type === 2
   const isTopup = props.log.type === 1
   const isManage = props.log.type === 3
+  const isError = props.log.type === 5
   const isSubscription = other?.billing_source === 'subscription'
   const isTieredBilling =
     isConsume &&
@@ -1259,6 +1260,19 @@ export function DetailsDialog(props: DetailsDialogProps) {
               <p className='min-w-0 pr-6 text-xs leading-relaxed break-all whitespace-pre-wrap sm:wrap-break-word'>
                 {details}
               </p>
+              {isError && (
+                <p className='mt-2 text-xs text-muted-foreground'>
+                  {t('Check the API request format in the documentation.')}{' '}
+                  <a
+                    href='https://docs.silicogrove.com/'
+                    target='_blank'
+                    rel='noopener noreferrer'
+                    className='text-primary underline underline-offset-2'
+                  >
+                    docs.silicogrove.com
+                  </a>
+                </p>
+              )}
             </div>
           </div>
         )}

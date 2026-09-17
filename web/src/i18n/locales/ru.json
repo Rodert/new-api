@@ -801,6 +801,7 @@
     "Check line {{line}} for a missing comma.": "Проверьте строку {{line}} на пропущенную запятую.",
     "Check out the Quick Start": "Ознакомьтесь с быстрым стартом",
     "Check resolved IPs against IP filters even when accessing by domain": "Проверять разрешенные IP-адреса по IP-фильтрам даже при доступе по домену",
+    "Check the API request format in the documentation.": "Проверьте формат API-запроса в документации.",
     "Check the override matrix at row = user group, column = billing group. If that cell is set, use it. Otherwise use the billing group base ratio from the pricing table.": "Проверьте матрицу переопределений: строка = группа пользователя, столбец = тарифная группа. Если ячейка задана — используется она, иначе базовый коэффициент тарифной группы из таблицы.",
     "Check-in failed": "Регистрация не удалась.",
     "Check-in Rewards": "Награды за отметку",

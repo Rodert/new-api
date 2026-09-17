@@ -121,6 +121,9 @@ func MaskSensitiveInfo(str string) string {
 
 	// Mask domain names without protocol (like openai.com, www.openai.com)
 	str = maskDomainPattern.ReplaceAllStringFunc(str, func(domain string) string {
+		if domain == "extra.resolution" {
+			return domain
+		}
 		return maskHostForPlainDomain(domain)
 	})
 

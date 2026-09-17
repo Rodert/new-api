@@ -801,6 +801,7 @@
     "Check line {{line}} for a missing comma.": "{{line}} 行目にカンマの抜けがないか確認してください。",
     "Check out the Quick Start": "クイックスタートをご確認ください",
     "Check resolved IPs against IP filters even when accessing by domain": "ドメインによるアクセスであっても、解決されたIPをIPフィルターと照合してチェックします",
+    "Check the API request format in the documentation.": "ドキュメントで API リクエスト形式を確認してください。",
     "Check the override matrix at row = user group, column = billing group. If that cell is set, use it. Otherwise use the billing group base ratio from the pricing table.": "上書きマトリクスの「行 = ユーザーグループ、列 = 課金グループ」のセルを確認します。設定されていればその値を、なければ料金表の課金グループの基本倍率を使います。",
     "Check-in failed": "チェックインできませんでした",
     "Check-in Rewards": "チェックイン報酬",

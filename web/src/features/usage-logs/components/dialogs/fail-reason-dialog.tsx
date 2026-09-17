@@ -72,6 +72,17 @@ export function FailReasonDialog({
               <p className='overflow-wrap-anywhere pr-10 text-sm leading-relaxed break-all whitespace-pre-wrap text-red-600'>
                 {failReason || '-'}
               </p>
+              <p className='mt-3 text-xs text-muted-foreground'>
+                {t('Check the API request format in the documentation.')}{' '}
+                <a
+                  href='https://docs.silicogrove.com/'
+                  target='_blank'
+                  rel='noopener noreferrer'
+                  className='text-primary underline underline-offset-2'
+                >
+                  docs.silicogrove.com
+                </a>
+              </p>
             </div>
           </div>
         </div>

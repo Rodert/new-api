@@ -801,6 +801,7 @@
     "Check line {{line}} for a missing comma.": "Kiểm tra dòng {{line}} xem có thiếu dấu phẩy không.",
     "Check out the Quick Start": "Xem hướng dẫn bắt đầu nhanh",
     "Check resolved IPs against IP filters even when accessing by domain": "Kiểm tra các IP đã phân giải đối chiếu với các bộ lọc IP ngay cả khi truy cập bằng tên miền",
+    "Check the API request format in the documentation.": "Kiểm tra định dạng yêu cầu API trong tài liệu.",
     "Check the override matrix at row = user group, column = billing group. If that cell is set, use it. Otherwise use the billing group base ratio from the pricing table.": "Kiểm tra ma trận ghi đè tại hàng = nhóm người dùng, cột = nhóm tính phí. Nếu ô đó được đặt thì dùng nó, nếu không thì dùng hệ số cơ bản của nhóm tính phí trong bảng định giá.",
     "Check-in failed": "Điểm danh thất bại",
     "Check-in Rewards": "Phần thưởng điểm danh",
