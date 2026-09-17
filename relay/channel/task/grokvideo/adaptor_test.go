@@ -63,8 +63,9 @@ func TestValidateGrokVideo15Seconds(t *testing.T) {
 		seconds string
 		valid   bool
 	}{
-		{seconds: "4", valid: true},
+		{seconds: "6", valid: true},
 		{seconds: "15", valid: true},
+		{seconds: "4", valid: false},
 		{seconds: "5", valid: false},
 	} {
 		t.Run(test.seconds, func(t *testing.T) {
@@ -81,7 +82,29 @@ func TestValidateGrokVideo15Seconds(t *testing.T) {
 			}
 			require.NotNil(t, taskErr)
 			assert.Equal(t, "invalid_seconds", taskErr.Code)
-			assert.Equal(t, "seconds must be one of: 4, 6, 8, 10, 12, 15", taskErr.Message)
+			assert.Equal(t, "seconds must be one of: 6, 8, 10, 12, 15", taskErr.Message)
 		})
 	}
+}
+
+func TestBuildRequestBodyIncludesReferenceImages(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	writer := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(writer)
+	ctx.Set("task_request", relaycommon.TaskSubmitReq{
+		Prompt:          "A cinematic product video",
+		ReferenceImages: []string{"https://example.com/one.png", "https://example.com/two.png"},
+	})
+
+	adaptor := &TaskAdaptor{}
+	body, err := adaptor.BuildRequestBody(ctx, &relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{
+		UpstreamModelName: "grok-video-1.5",
+	}})
+	require.NoError(t, err)
+	data, err := io.ReadAll(body)
+	require.NoError(t, err)
+
+	var got requestPayload
+	require.NoError(t, common.Unmarshal(data, &got))
+	assert.Equal(t, []string{"https://example.com/one.png", "https://example.com/two.png"}, got.ImageURLs)
 }

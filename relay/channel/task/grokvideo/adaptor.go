@@ -70,13 +70,13 @@ func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycom
 		if req.Seconds != "" {
 			parsedSeconds, parseErr := strconv.Atoi(req.Seconds)
 			if parseErr != nil {
-				return service.TaskErrorWrapperLocal(errors.New("seconds must be one of: 4, 6, 8, 10, 12, 15"), "invalid_seconds", http.StatusBadRequest)
+				return service.TaskErrorWrapperLocal(errors.New("seconds must be one of: 6, 8, 10, 12, 15"), "invalid_seconds", http.StatusBadRequest)
 			}
 			seconds = parsedSeconds
 		}
 		if seconds != 0 {
 			if _, ok := grokVideo15SupportedSeconds[seconds]; !ok {
-				return service.TaskErrorWrapperLocal(errors.New("seconds must be one of: 4, 6, 8, 10, 12, 15"), "invalid_seconds", http.StatusBadRequest)
+				return service.TaskErrorWrapperLocal(errors.New("seconds must be one of: 6, 8, 10, 12, 15"), "invalid_seconds", http.StatusBadRequest)
 			}
 		}
 	}
@@ -125,6 +125,7 @@ func (a *TaskAdaptor) BuildRequestBody(c *gin.Context, info *relaycommon.RelayIn
 	}
 	images := append([]string{}, req.ImageURLs...)
 	images = append(images, req.Images...)
+	images = append(images, req.ReferenceImages...)
 	if ref := req.GetInputReferenceURL(); ref != "" {
 		images = append(images, ref)
 	}
