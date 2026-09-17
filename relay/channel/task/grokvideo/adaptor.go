@@ -97,7 +97,7 @@ func (a *TaskAdaptor) EstimateBilling(c *gin.Context, info *relaycommon.RelayInf
 	if err != nil {
 		return nil
 	}
-	return map[string]float64{"seconds": float64(effectiveSeconds(req, info.UpstreamModelName))}
+	return map[string]float64{"seconds": float64(effectiveSeconds(&req, info.UpstreamModelName))}
 }
 
 func effectiveSeconds(req *relaycommon.TaskSubmitReq, upstreamModel string) int {
@@ -144,7 +144,7 @@ func (a *TaskAdaptor) BuildRequestBody(c *gin.Context, info *relaycommon.RelayIn
 	if resolution == "" {
 		resolution = req.Size
 	}
-	seconds := effectiveSeconds(req, info.UpstreamModelName)
+	seconds := effectiveSeconds(&req, info.UpstreamModelName)
 	body := requestPayload{Model: info.UpstreamModelName, Prompt: req.Prompt, Seconds: &seconds, AspectRatio: req.AspectRatio, Resolution: resolution, ImageURLs: images}
 	data, err := common.Marshal(body)
 	if err != nil {
