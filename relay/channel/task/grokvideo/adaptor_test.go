@@ -106,5 +106,44 @@ func TestBuildRequestBodyIncludesReferenceImages(t *testing.T) {
 
 	var got requestPayload
 	require.NoError(t, common.Unmarshal(data, &got))
+	require.NotNil(t, got.Seconds)
+	assert.Equal(t, 15, *got.Seconds)
 	assert.Equal(t, []string{"https://example.com/one.png", "https://example.com/two.png"}, got.ImageURLs)
+}
+
+func TestEstimateBillingUsesEffectiveSeconds(t *testing.T) {
+	for _, test := range []struct {
+		name          string
+		request       relaycommon.TaskSubmitReq
+		upstreamModel string
+		wantSeconds   float64
+	}{
+		{
+			name:          "default duration",
+			upstreamModel: "grok-video-1.5",
+			wantSeconds:   15,
+		},
+		{
+			name: "grok image video multiple references",
+			request: relaycommon.TaskSubmitReq{
+				Seconds: "15",
+				ReferenceImages: []string{
+					"https://example.com/one.png",
+					"https://example.com/two.png",
+				},
+			},
+			upstreamModel: "grok-image-video",
+			wantSeconds:   10,
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+			ctx.Set("task_request", test.request)
+
+			got := (&TaskAdaptor{}).EstimateBilling(ctx, &relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{
+				UpstreamModelName: test.upstreamModel,
+			}})
+			assert.Equal(t, map[string]float64{"seconds": test.wantSeconds}, got)
+		})
+	}
 }

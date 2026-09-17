@@ -92,19 +92,30 @@ func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycom
 	return nil
 }
 
-func (a *TaskAdaptor) EstimateBilling(c *gin.Context, _ *relaycommon.RelayInfo) map[string]float64 {
+func (a *TaskAdaptor) EstimateBilling(c *gin.Context, info *relaycommon.RelayInfo) map[string]float64 {
 	req, err := relaycommon.GetTaskRequest(c)
 	if err != nil {
 		return nil
 	}
+	return map[string]float64{"seconds": float64(effectiveSeconds(req, info.UpstreamModelName))}
+}
+
+func effectiveSeconds(req *relaycommon.TaskSubmitReq, upstreamModel string) int {
 	seconds, _ := strconv.Atoi(req.Seconds)
 	if seconds == 0 {
 		seconds = req.Duration
 	}
 	if seconds == 0 {
-		seconds = 4
+		seconds = 15
 	}
-	return map[string]float64{"seconds": float64(seconds)}
+	imageCount := len(req.ImageURLs) + len(req.Images) + len(req.ReferenceImages)
+	if req.GetInputReferenceURL() != "" {
+		imageCount++
+	}
+	if upstreamModel == "grok-image-video" && imageCount >= 2 && seconds > 10 {
+		return 10
+	}
+	return seconds
 }
 
 func (a *TaskAdaptor) BuildRequestURL(_ *relaycommon.RelayInfo) (string, error) {
@@ -133,15 +144,8 @@ func (a *TaskAdaptor) BuildRequestBody(c *gin.Context, info *relaycommon.RelayIn
 	if resolution == "" {
 		resolution = req.Size
 	}
-	body := requestPayload{Model: info.UpstreamModelName, Prompt: req.Prompt, AspectRatio: req.AspectRatio, Resolution: resolution, ImageURLs: images}
-	if seconds, parseErr := strconv.Atoi(req.Seconds); parseErr == nil && seconds > 0 {
-		body.Seconds = &seconds
-	} else if req.Duration > 0 {
-		body.Seconds = &req.Duration
-	}
-	if len(images) >= 2 && body.Model == "grok-image-video" && body.Seconds != nil && *body.Seconds > 10 {
-		*body.Seconds = 10
-	}
+	seconds := effectiveSeconds(req, info.UpstreamModelName)
+	body := requestPayload{Model: info.UpstreamModelName, Prompt: req.Prompt, Seconds: &seconds, AspectRatio: req.AspectRatio, Resolution: resolution, ImageURLs: images}
 	data, err := common.Marshal(body)
 	if err != nil {
 		return nil, err
