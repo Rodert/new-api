@@ -251,7 +251,7 @@ export function useTaskLogsColumns(isAdmin: boolean): ColumnDef<TaskLog>[] {
           log.action === TASK_ACTIONS.REMIX_GENERATE
         const isSuccess = status === TASK_STATUS.SUCCESS
 
-        if (isAdmin && isSuccess && isVideoTask && log.result_url) {
+        if (isSuccess && isVideoTask && log.result_url) {
           const videoUrl = `/v1/videos/${log.task_id}/content`
           return (
             <a
