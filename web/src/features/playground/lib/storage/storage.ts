@@ -24,6 +24,7 @@ import {
 } from '../../constants'
 import type {
   ImageGenerationResponse,
+  ImageTaskResponse,
   Message,
   ParameterEnabled,
   PlaygroundConfig,
@@ -65,6 +66,7 @@ type ImageWorkspaceConfig = {
 
 export type ImageWorkspaceItem = {
   id: string
+  taskId?: string
   prompt: string
   model: string
   group: string
@@ -72,11 +74,12 @@ export type ImageWorkspaceItem = {
   qualityPreset: string
   n: number
   createdAt: number
-  status: 'loading' | 'completed' | 'error'
-  error?: string
+  status: 'queued' | 'processing' | 'completed' | 'failed'
+  progress?: number | string
+  error?: ImageTaskResponse['error']
   size?: string
   referenceImages?: string[]
-  data: ImageGenerationResponse['data']
+  data?: ImageGenerationResponse['data']
 }
 
 type VideoWorkspaceConfig = {
@@ -683,8 +686,8 @@ export function saveMessages(messages: Message[]): void {
 
 export function loadImageWorkspaceResult(): ImageGenerationResponse | null {
   try {
-    const item = loadImageWorkspaceItems()[0]
-    return item ? { data: item.data } : null
+    const item = loadImageWorkspaceItems().find((current) => current.data)
+    return item?.data ? { data: item.data } : null
   } catch (error) {
     // eslint-disable-next-line no-console
     console.error('Failed to load image workspace:', error)
@@ -694,16 +697,20 @@ export function loadImageWorkspaceResult(): ImageGenerationResponse | null {
 
 export function loadImageWorkspaceItems(): ImageWorkspaceItem[] {
   try {
-    return [...volatileImageWorkspaceItems, ...loadWorkspace().image.items].slice(
-      0,
-      24
-    )
+    const seen = new Set<string>()
+    return [...volatileImageWorkspaceItems, ...loadWorkspace().image.items]
+      .filter((item) => {
+        const key = item.taskId ?? item.id
+        if (seen.has(key)) return false
+        seen.add(key)
+        return true
+      })
+      .slice(0, 24)
   } catch (error) {
     // eslint-disable-next-line no-console
     console.error('Failed to load image workspace items:', error)
     return volatileImageWorkspaceItems.slice(0, 24)
   }
-  return []
 }
 
 export function saveImageWorkspaceResult(
@@ -764,6 +771,85 @@ export function saveImageWorkspaceResult(
     }
     // eslint-disable-next-line no-console
     console.error('Failed to save image workspace:', error)
+  }
+}
+
+export function saveImageWorkspaceTask(
+  imageTask: ImageTaskResponse,
+  metadata?: ImageWorkspaceMetadata
+): void {
+  let savedItem: ImageWorkspaceItem | undefined
+  try {
+    updateWorkspace((workspace) => {
+      const existingWorkspaceItem = workspace.image.items.find(
+        (item) => item.taskId === imageTask.id
+      )
+      const existingItem =
+        existingWorkspaceItem ??
+        volatileImageWorkspaceItems.find((item) => item.taskId === imageTask.id)
+      const imageConfig: ImageWorkspaceConfig = metadata
+        ? {
+            model: metadata.model,
+            group: metadata.group,
+            aspectRatio: metadata.aspectRatio,
+            qualityPreset: metadata.qualityPreset,
+            n: metadata.n,
+            response_format: 'url',
+          }
+        : workspace.image.config
+      const item: ImageWorkspaceItem = {
+        ...existingItem,
+        id: existingItem?.id ?? createWorkspaceItemID(),
+        taskId: imageTask.id,
+        prompt: metadata?.prompt ?? existingItem?.prompt ?? '',
+        model: metadata?.model ?? existingItem?.model ?? imageConfig.model,
+        group: metadata?.group ?? existingItem?.group ?? imageConfig.group,
+        aspectRatio:
+          metadata?.aspectRatio ??
+          existingItem?.aspectRatio ??
+          imageConfig.aspectRatio,
+        qualityPreset:
+          metadata?.qualityPreset ??
+          existingItem?.qualityPreset ??
+          imageConfig.qualityPreset,
+        n: metadata?.n ?? existingItem?.n ?? imageConfig.n,
+        createdAt: existingItem?.createdAt ?? Date.now(),
+        status: imageTask.status,
+        progress: imageTask.progress ?? existingItem?.progress,
+        error: imageTask.error ?? existingItem?.error,
+        size: metadata?.size ?? existingItem?.size,
+        referenceImages:
+          metadata?.referenceImages ?? existingItem?.referenceImages,
+        data: imageTask.data ?? existingItem?.data,
+      }
+      savedItem = item
+
+      return {
+        ...workspace,
+        image: {
+          config: imageConfig,
+          items: existingWorkspaceItem
+            ? workspace.image.items.map((current) =>
+                current.taskId === imageTask.id ? item : current
+              )
+            : [item, ...workspace.image.items].slice(0, 24),
+        },
+      }
+    })
+    volatileImageWorkspaceItems = volatileImageWorkspaceItems.filter(
+      (item) => item.taskId !== imageTask.id
+    )
+  } catch (error) {
+    if (savedItem) {
+      volatileImageWorkspaceItems = [
+        savedItem,
+        ...volatileImageWorkspaceItems.filter(
+          (item) => item.taskId !== imageTask.id
+        ),
+      ].slice(0, 24)
+    }
+    // eslint-disable-next-line no-console
+    console.error('Failed to save image workspace task:', error)
   }
 }
 

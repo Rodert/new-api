@@ -13,6 +13,7 @@ import {
   loadVideoWorkspaceTasks,
   loadVideoWorkspaceTask,
   saveImageWorkspaceResult,
+  saveImageWorkspaceTask,
   saveVideoWorkspaceTask,
 } from '../lib/storage/storage'
 
@@ -136,6 +137,94 @@ describe('media workspace storage', () => {
 
     clearImageWorkspaceItems()
     assert.deepEqual(loadImageWorkspaceItems(), [])
+  })
+
+  test('updates an asynchronous image task without duplicating its history record', () => {
+    const metadata = {
+      aspectRatio: '1:1',
+      group: 'default',
+      model: 'gpt-image-2',
+      n: 1,
+      prompt: 'async image',
+      qualityPreset: 'hd',
+      referenceImages: ['https://example.com/reference.png'],
+      size: '1024x1024',
+    }
+
+    saveImageWorkspaceTask(
+      {
+        id: 'image_task_1',
+        object: 'image.task',
+        progress: '0%',
+        status: 'queued',
+      },
+      metadata
+    )
+    saveImageWorkspaceTask({
+      id: 'image_task_1',
+      object: 'image.task',
+      progress: '50%',
+      status: 'processing',
+    })
+    saveImageWorkspaceTask({
+      data: [{ url: 'https://example.com/completed.png' }],
+      id: 'image_task_1',
+      object: 'image.task',
+      progress: '100%',
+      status: 'completed',
+    })
+
+    const items = loadImageWorkspaceItems()
+    assert.equal(items.length, 1)
+    assert.equal(items[0]?.taskId, 'image_task_1')
+    assert.equal(items[0]?.status, 'completed')
+    assert.equal(items[0]?.prompt, metadata.prompt)
+    assert.deepEqual(items[0]?.referenceImages, metadata.referenceImages)
+    assert.deepEqual(items[0]?.data, [
+      { url: 'https://example.com/completed.png' },
+    ])
+  })
+
+  test('keeps multiple pending image tasks so they can be polled independently', () => {
+    saveImageWorkspaceTask(
+      {
+        id: 'image_task_first',
+        object: 'image.task',
+        status: 'queued',
+      },
+      {
+        aspectRatio: '1:1',
+        group: 'default',
+        model: 'gpt-image-2',
+        n: 1,
+        prompt: 'first pending image',
+        qualityPreset: 'auto',
+        size: '1024x1024',
+      }
+    )
+    saveImageWorkspaceTask(
+      {
+        id: 'image_task_second',
+        object: 'image.task',
+        status: 'processing',
+      },
+      {
+        aspectRatio: '16:9',
+        group: 'default',
+        model: 'gpt-image-2',
+        n: 1,
+        prompt: 'second pending image',
+        qualityPreset: 'auto',
+        size: '1792x1024',
+      }
+    )
+
+    const items = loadImageWorkspaceItems()
+    assert.equal(items.length, 2)
+    assert.deepEqual(
+      items.map((item) => item.taskId),
+      ['image_task_second', 'image_task_first']
+    )
   })
 
   test('keeps multiple video tasks and preserves their generation settings', () => {

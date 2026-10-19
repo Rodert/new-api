@@ -138,7 +138,7 @@ export interface ImageTaskResponse {
   id: string
   object: 'image.task'
   status: 'queued' | 'processing' | 'completed' | 'failed'
-  progress?: number
+  progress?: number | string
   created_at?: number
   started_at?: number
   completed_at?: number

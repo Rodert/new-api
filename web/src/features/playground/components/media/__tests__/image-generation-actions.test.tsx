@@ -46,7 +46,8 @@ for (const key of domGlobals) {
   })
 }
 
-const { act } = await import('react')
+const React = await import('react')
+const { act } = React
 const { createRoot } = await import('react-dom/client')
 const i18next = (await import('i18next')).default
 const { initReactI18next } = await import('react-i18next')
@@ -109,6 +110,86 @@ test('opens a generated image URL in a new tab from the enlarge action', async (
   assert.equal(enlargeLink.href, source)
   assert.equal(enlargeLink.target, '_blank')
   assert.equal(enlargeLink.rel, 'noreferrer')
+
+  await act(async () => root.unmount())
+  container.remove()
+})
+
+test('shows a queued image task in history without rendering an image', async () => {
+  const container = document.createElement('div')
+  document.body.append(container)
+  const root = createRoot(container)
+
+  await act(async () => {
+    root.render(
+      <ImageGenerationHistory
+        isRegenerating={false}
+        items={[
+          {
+            id: 'image-queued',
+            taskId: 'task_queued',
+            prompt: 'Draw a queued image',
+            model: 'image-model',
+            group: 'default',
+            aspectRatio: '1:1',
+            qualityPreset: 'standard',
+            n: 1,
+            createdAt: 1,
+            status: 'queued',
+            progress: '10%',
+            size: '1024x1024',
+          },
+        ]}
+        onClear={() => undefined}
+        onDelete={() => undefined}
+        onRegenerate={() => undefined}
+      />
+    )
+  })
+
+  assert.match(container.textContent ?? '', /Queued/)
+  assert.match(container.textContent ?? '', /task_queued/)
+  assert.match(container.textContent ?? '', /10%/)
+  assert.equal(container.querySelector('img'), null)
+
+  await act(async () => root.unmount())
+  container.remove()
+})
+
+test('shows an asynchronous image task failure in history', async () => {
+  const container = document.createElement('div')
+  document.body.append(container)
+  const root = createRoot(container)
+
+  await act(async () => {
+    root.render(
+      <ImageGenerationHistory
+        isRegenerating={false}
+        items={[
+          {
+            id: 'image-failed',
+            taskId: 'task_failed',
+            prompt: 'Draw a failed image',
+            model: 'image-model',
+            group: 'default',
+            aspectRatio: '1:1',
+            qualityPreset: 'standard',
+            n: 1,
+            createdAt: 1,
+            status: 'failed',
+            error: { message: 'Provider rejected the request' },
+            size: '1024x1024',
+          },
+        ]}
+        onClear={() => undefined}
+        onDelete={() => undefined}
+        onRegenerate={() => undefined}
+      />
+    )
+  })
+
+  assert.match(container.textContent ?? '', /Failed/)
+  assert.match(container.textContent ?? '', /Provider rejected the request/)
 
   await act(async () => root.unmount())
   container.remove()

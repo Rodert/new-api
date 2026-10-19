@@ -107,6 +107,7 @@ const imageWorkspaceConfigSchema = z.object({
 
 const imageWorkspaceItemSchema = z.object({
   id: z.string(),
+  taskId: z.string().optional(),
   prompt: z.string(),
   model: z.string(),
   group: z.string(),
@@ -114,11 +115,29 @@ const imageWorkspaceItemSchema = z.object({
   qualityPreset: z.string(),
   n: z.number(),
   createdAt: z.number(),
-  status: z.enum(['loading', 'completed', 'error']),
-  error: z.string().optional(),
+  status: z
+    .enum(['loading', 'queued', 'processing', 'completed', 'error', 'failed'])
+    .transform((status) => {
+      if (status === 'loading') return 'processing' as const
+      if (status === 'error') return 'failed' as const
+      return status
+    }),
+  progress: z.union([z.number(), z.string()]).optional(),
+  error: z
+    .union([
+      z.string(),
+      z.object({
+        message: z.string().optional(),
+        type: z.string().optional(),
+      }),
+    ])
+    .optional()
+    .transform((error) =>
+      typeof error === 'string' ? { message: error } : error
+    ),
   size: z.string().optional(),
   referenceImages: z.array(z.string()).optional(),
-  data: z.array(imageResultSchema),
+  data: z.array(imageResultSchema).optional(),
 })
 
 const videoTaskResponseSchema = z

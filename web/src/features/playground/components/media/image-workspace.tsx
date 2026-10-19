@@ -46,7 +46,7 @@ import {
   clearImageWorkspaceItems,
   deleteImageWorkspaceItem,
   loadImageWorkspaceItems,
-  saveImageWorkspaceResult,
+  saveImageWorkspaceTask,
 } from '../../lib'
 import type {
   ImageWorkspaceItem,
@@ -121,16 +121,53 @@ export function ImageWorkspace({
   const [items, setItems] = useState<ImageWorkspaceItem[]>(
     loadImageWorkspaceItems
   )
-  const [isGenerating, setIsGenerating] = useState(false)
-  const generationAbortRef = useRef<AbortController | null>(null)
+  const [isSubmitting, setIsSubmitting] = useState(false)
   const isSingleImageModel = isGeminiImageModel(config.model)
 
-  useEffect(
-    () => () => {
-      generationAbortRef.current?.abort()
-    },
-    []
-  )
+  useEffect(() => {
+    const pendingTaskIDs = items.flatMap((item) =>
+      item.taskId && (item.status === 'queued' || item.status === 'processing')
+        ? [item.taskId]
+        : []
+    )
+    if (!pendingTaskIDs.length) return
+
+    let cancelled = false
+    let timer: number | undefined
+    let hasReportedError = false
+
+    const poll = async () => {
+      const responses = await Promise.allSettled(
+        pendingTaskIDs.map((taskID) => getImageTask(taskID))
+      )
+      if (cancelled) return
+
+      let hasUpdates = false
+      for (const response of responses) {
+        if (response.status === 'fulfilled') {
+          saveImageWorkspaceTask(response.value)
+          hasUpdates = true
+          continue
+        }
+        if (!hasReportedError) {
+          toast.error(
+            response.reason instanceof Error
+              ? response.reason.message
+              : t('Request failed')
+          )
+          hasReportedError = true
+        }
+      }
+      if (hasUpdates) setItems(loadImageWorkspaceItems())
+      if (!cancelled) timer = window.setTimeout(poll, 3000)
+    }
+
+    timer = window.setTimeout(poll, 3000)
+    return () => {
+      cancelled = true
+      if (timer !== undefined) window.clearTimeout(timer)
+    }
+  }, [items, t])
 
   const handleFiles = async (files: FileList | null) => {
     if (!files?.length) return
@@ -160,47 +197,15 @@ export function ImageWorkspace({
     metadata: ImageWorkspaceMetadata,
     images: File[] = []
   ) => {
-    generationAbortRef.current?.abort()
-    const abortController = new AbortController()
-    generationAbortRef.current = abortController
-    setIsGenerating(true)
+    setIsSubmitting(true)
     try {
-      let task = await createImageTask(request, images, abortController.signal)
-      while (task.status === 'queued' || task.status === 'processing') {
-        await new Promise<void>((resolve, reject) => {
-          const handleAbort = () => {
-            window.clearTimeout(timer)
-            reject(new DOMException('Aborted', 'AbortError'))
-          }
-          const timer = window.setTimeout(() => {
-            abortController.signal.removeEventListener('abort', handleAbort)
-            resolve()
-          }, 2000)
-          abortController.signal.addEventListener('abort', handleAbort, {
-            once: true,
-          })
-        })
-        task = await getImageTask(task.id, abortController.signal)
-      }
-      if (task.status === 'failed') {
-        throw new Error(task.error?.message || t('Request failed'))
-      }
-      if (task.status !== 'completed' || !Array.isArray(task.data)) {
-        throw new Error(t('Request failed'))
-      }
-      saveImageWorkspaceResult({ data: task.data }, metadata)
+      const task = await createImageTask(request, images)
+      saveImageWorkspaceTask(task, metadata)
       setItems(loadImageWorkspaceItems())
     } catch (error) {
-      if (!abortController.signal.aborted) {
-        toast.error(
-          error instanceof Error ? error.message : t('Request failed')
-        )
-      }
+      toast.error(error instanceof Error ? error.message : t('Request failed'))
     } finally {
-      if (generationAbortRef.current === abortController) {
-        generationAbortRef.current = null
-        setIsGenerating(false)
-      }
+      setIsSubmitting(false)
     }
   }
 
@@ -319,13 +324,13 @@ export function ImageWorkspace({
           <section className='bg-background grid h-fit gap-4 rounded-lg border p-4'>
             <div className='flex items-center gap-2'>
               <GroupSelector
-                disabled={isGenerating || isModelLoading}
+                disabled={isSubmitting || isModelLoading}
                 groups={groups}
                 onGroupChange={(value) => onConfigChange('group', value)}
                 selectedGroup={config.group}
               />
               <ModelSelector
-                disabled={isGenerating || isModelLoading}
+                disabled={isSubmitting || isModelLoading}
                 models={models}
                 onModelChange={(value) => onConfigChange('model', value)}
                 selectedModel={config.model}
@@ -338,7 +343,7 @@ export function ImageWorkspace({
               </Label>
               <Textarea
                 className='min-h-36 resize-none'
-                disabled={isGenerating}
+                disabled={isSubmitting}
                 id='image-prompt'
                 maxLength={5000}
                 onChange={(event) => setPrompt(event.target.value)}
@@ -351,7 +356,7 @@ export function ImageWorkspace({
               <label className='text-muted-foreground grid gap-1.5 text-xs font-medium'>
                 {t('Aspect ratio')}
                 <Select
-                  disabled={isGenerating}
+                  disabled={isSubmitting}
                   items={imageSizeOptions}
                   onValueChange={(value) => {
                     if (value) setSize(value)
@@ -375,7 +380,7 @@ export function ImageWorkspace({
               <label className='text-muted-foreground grid gap-1.5 text-xs font-medium'>
                 {t('Clarity')}
                 <Select
-                  disabled={isGenerating}
+                  disabled={isSubmitting}
                   items={imageQualityOptions}
                   onValueChange={(value) => {
                     if (value) setQuality(value)
@@ -399,7 +404,7 @@ export function ImageWorkspace({
               <label className='text-muted-foreground grid gap-1.5 text-xs font-medium'>
                 {t('Quantity')}
                 <Select
-                  disabled={isGenerating || isSingleImageModel}
+                  disabled={isSubmitting || isSingleImageModel}
                   items={imageQuantityOptions}
                   onValueChange={(value) => setQuantity(Number(value))}
                   value={String(isSingleImageModel ? 1 : quantity)}
@@ -441,7 +446,7 @@ export function ImageWorkspace({
                 />
                 <Button
                   disabled={
-                    isGenerating || references.length >= maxReferenceImages
+                    isSubmitting || references.length >= maxReferenceImages
                   }
                   onClick={() => inputRef.current?.click()}
                   size='sm'
@@ -468,7 +473,7 @@ export function ImageWorkspace({
                           index: index + 1,
                         })}
                         className='bg-background absolute -top-2 -right-2 shadow-sm'
-                        disabled={isGenerating}
+                        disabled={isSubmitting}
                         onClick={() =>
                           setReferences((current) =>
                             current.filter(
@@ -501,22 +506,22 @@ export function ImageWorkspace({
             )}
             <Button
               className='w-full'
-              disabled={isGenerating || !prompt.trim() || !config.model}
+              disabled={isSubmitting || !prompt.trim() || !config.model}
               onClick={() => void handleGenerate()}
               size='lg'
               type='button'
             >
-              {isGenerating ? (
+              {isSubmitting ? (
                 <LoaderCircleIcon className='animate-spin' />
               ) : (
                 <SparklesIcon />
               )}
-              {isGenerating ? t('Generating...') : t('Create image')}
+              {isSubmitting ? t('Generating...') : t('Create image')}
             </Button>
           </section>
 
           <ImageGenerationHistory
-            isRegenerating={isGenerating}
+            isRegenerating={isSubmitting}
             items={items}
             onClear={handleClearAll}
             onDelete={handleDelete}

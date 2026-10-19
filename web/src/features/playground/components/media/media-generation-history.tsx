@@ -132,15 +132,31 @@ function RecordActions(props: HistoryActionsProps) {
 
 function ImageGenerationCard(props: ImageGenerationCardProps) {
   const { t } = useTranslation()
+  const isCompleted = props.item.status === 'completed'
+  const isFailed = props.item.status === 'failed'
+  let statusLabel = t('Generating...')
+  if (isCompleted) statusLabel = t('Completed')
+  if (isFailed) statusLabel = t('Failed')
+  if (props.item.status === 'queued') statusLabel = t('Queued')
+  const progress =
+    typeof props.item.progress === 'string'
+      ? props.item.progress
+      : `${props.item.progress ?? 0}%`
 
   return (
     <article className='bg-background overflow-hidden rounded-lg border'>
       <div className='flex items-start justify-between gap-3 border-b px-3 py-2.5'>
         <div className='min-w-0'>
-          <p className='text-xs font-semibold'>{t('Completed')}</p>
-          <p className='text-muted-foreground mt-0.5 text-xs'>
-            {t('Created')} {new Date(props.item.createdAt).toLocaleString()}
-          </p>
+          <p className='text-xs font-semibold'>{statusLabel}</p>
+          {props.item.taskId ? (
+            <p className='text-muted-foreground mt-0.5 truncate font-mono text-[11px]'>
+              {t('Task ID')}: {props.item.taskId}
+            </p>
+          ) : (
+            <p className='text-muted-foreground mt-0.5 text-xs'>
+              {t('Created')} {new Date(props.item.createdAt).toLocaleString()}
+            </p>
+          )}
         </div>
         <RecordActions
           isRegenerating={props.isRegenerating}
@@ -174,68 +190,85 @@ function ImageGenerationCard(props: ImageGenerationCardProps) {
             {t('Reference images')}: {props.item.referenceImages.length}
           </p>
         ) : null}
-        <div className='grid gap-2 sm:grid-cols-2'>
-          {props.item.data.map((image, index) => {
-            const source =
-              image.url ||
-              (image.b64_json
-                ? `data:image/png;base64,${image.b64_json}`
-                : undefined)
-            if (!source) return null
+        {isFailed ? (
+          <p className='text-destructive text-xs'>
+            {props.item.error?.message || t('Request failed')}
+          </p>
+        ) : null}
+        {isCompleted ? (
+          <div className='grid gap-2 sm:grid-cols-2'>
+            {props.item.data?.map((image, index) => {
+              const source =
+                image.url ||
+                (image.b64_json
+                  ? `data:image/png;base64,${image.b64_json}`
+                  : undefined)
+              if (!source) return null
 
-            return (
-              <figure
-                className='bg-muted relative overflow-hidden rounded-md border'
-                key={image.url || image.b64_json || index}
-              >
-                <img
-                  alt={
-                    image.revised_prompt ||
-                    t('Generated image {{index}}', { index: index + 1 })
-                  }
-                  className='aspect-square w-full object-contain'
-                  src={source}
-                />
-                <div className='absolute right-2 bottom-2 flex gap-1'>
-                  <Tooltip>
-                    <TooltipTrigger
-                      render={
-                        <Button
-                          aria-label={t('Open in new tab')}
-                          className='bg-background/90 shadow-sm'
-                          render={
-                            <a href={source} rel='noreferrer' target='_blank' />
-                          }
-                          size='icon-xs'
-                          variant='outline'
-                        >
-                          <Maximize2Icon />
-                        </Button>
-                      }
-                    />
-                    <TooltipContent>{t('Open in new tab')}</TooltipContent>
-                  </Tooltip>
-                  <Tooltip>
-                    <TooltipTrigger
-                      render={
-                        <Button
-                          aria-label={t('Download')}
-                          className='bg-background/90 shadow-sm'
-                          render={<a download href={source} />}
-                          size='icon-xs'
-                          variant='outline'
-                        >
-                          <DownloadIcon />
-                        </Button>
-                      }
-                    />
-                    <TooltipContent>{t('Download')}</TooltipContent>
-                  </Tooltip>
-                </div>
-              </figure>
-            )
-          })}
-        </div>
+              return (
+                <figure
+                  className='bg-muted relative overflow-hidden rounded-md border'
+                  key={image.url || image.b64_json || index}
+                >
+                  <img
+                    alt={
+                      image.revised_prompt ||
+                      t('Generated image {{index}}', { index: index + 1 })
+                    }
+                    className='aspect-square w-full object-contain'
+                    src={source}
+                  />
+                  <div className='absolute right-2 bottom-2 flex gap-1'>
+                    <Tooltip>
+                      <TooltipTrigger
+                        render={
+                          <Button
+                            aria-label={t('Open in new tab')}
+                            className='bg-background/90 shadow-sm'
+                            render={
+                              <a
+                                href={source}
+                                rel='noreferrer'
+                                target='_blank'
+                              />
+                            }
+                            size='icon-xs'
+                            variant='outline'
+                          >
+                            <Maximize2Icon />
+                          </Button>
+                        }
+                      />
+                      <TooltipContent>{t('Open in new tab')}</TooltipContent>
+                    </Tooltip>
+                    <Tooltip>
+                      <TooltipTrigger
+                        render={
+                          <Button
+                            aria-label={t('Download')}
+                            className='bg-background/90 shadow-sm'
+                            render={<a download href={source} />}
+                            size='icon-xs'
+                            variant='outline'
+                          >
+                            <DownloadIcon />
+                          </Button>
+                        }
+                      />
+                      <TooltipContent>{t('Download')}</TooltipContent>
+                    </Tooltip>
+                  </div>
+                </figure>
+              )
+            })}
+          </div>
+        ) : null}
+        {!isCompleted && !isFailed ? (
+          <div className='text-muted-foreground flex items-center gap-2 text-xs'>
+            <LoaderCircleIcon className='size-3.5 animate-spin' />
+            <span>{progress}</span>
+          </div>
+        ) : null}
       </div>
     </article>
   )
