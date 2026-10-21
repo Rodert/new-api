@@ -479,12 +479,20 @@ func playgroundVideoTaskResponse(task *model.Task) (respBody []byte, taskResp *d
 	}
 
 	response := dto.VideoTaskResponse{
-		TaskId: task.TaskID,
-		Status: status,
-		Url:    task.GetResultURL(),
-		Format: "mp4",
+		TaskId:    task.TaskID,
+		Status:    status,
+		Url:       task.GetResultURL(),
+		Format:    "mp4",
+		CreatedAt: task.SubmitTime,
+	}
+	if task.FinishTime >= task.SubmitTime && task.SubmitTime > 0 {
+		response.ProcessingTime = task.FinishTime - task.SubmitTime
+	}
+	if task.Status == model.TaskStatusSuccess {
+		response.CompletedAt = task.FinishTime
 	}
 	if task.Status == model.TaskStatusFailure {
+		response.FailedAt = task.FinishTime
 		response.Error = &dto.VideoTaskError{Message: task.FailReason}
 	}
 	respBody, err := common.Marshal(response)

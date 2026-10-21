@@ -61,7 +61,8 @@ await i18next.use(initReactI18next).init({
     },
   },
 })
-const { ImageGenerationHistory } = await import('../media-generation-history')
+const { ImageGenerationHistory, VideoGenerationHistory } =
+  await import('../media-generation-history')
 const reactTestGlobals = globalThis as typeof globalThis & {
   IS_REACT_ACT_ENVIRONMENT?: boolean
 }
@@ -91,6 +92,7 @@ test('opens a generated image URL in a new tab from the enlarge action', async (
             qualityPreset: 'standard',
             n: 1,
             createdAt: 1,
+            finishedAt: 12_501,
             status: 'completed',
             size: '1024x1024',
             data: [{ url: source }],
@@ -110,6 +112,53 @@ test('opens a generated image URL in a new tab from the enlarge action', async (
   assert.equal(enlargeLink.href, source)
   assert.equal(enlargeLink.target, '_blank')
   assert.equal(enlargeLink.rel, 'noreferrer')
+  assert.match(container.textContent ?? '', /Created/)
+  assert.match(container.textContent ?? '', /Duration/)
+  assert.match(container.textContent ?? '', /12\.5s/)
+
+  await act(async () => root.unmount())
+  container.remove()
+})
+
+test('shows submission time and generation duration for a video task', async () => {
+  const createdAt = Date.UTC(2026, 9, 21, 4, 30, 0)
+  const container = document.createElement('div')
+  document.body.append(container)
+  const root = createRoot(container)
+
+  await act(async () => {
+    root.render(
+      <VideoGenerationHistory
+        isRegenerating={false}
+        tasks={[
+          {
+            id: 'video-timed',
+            taskId: 'task_video_timed',
+            task_id: 'task_video_timed',
+            prompt: 'Generate a timed video',
+            model: 'video-model',
+            group: 'default',
+            aspectRatio: '16:9',
+            seconds: '5',
+            createdAt,
+            finishedAt: createdAt + 45_000,
+            status: 'succeeded',
+          },
+        ]}
+        onClear={() => undefined}
+        onDelete={() => undefined}
+        onRegenerate={() => undefined}
+      />
+    )
+  })
+
+  assert.match(container.textContent ?? '', /Created/)
+  assert.match(container.textContent ?? '', /Duration/)
+  assert.match(container.textContent ?? '', /45s/)
+  assert.match(
+    container.textContent ?? '',
+    new RegExp(new Date(createdAt).toLocaleString())
+  )
 
   await act(async () => root.unmount())
   container.remove()

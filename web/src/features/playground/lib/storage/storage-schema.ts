@@ -115,6 +115,7 @@ const imageWorkspaceItemSchema = z.object({
   qualityPreset: z.string(),
   n: z.number(),
   createdAt: z.number(),
+  finishedAt: z.number().optional(),
   status: z
     .enum(['loading', 'queued', 'processing', 'completed', 'error', 'failed'])
     .transform((status) => {
@@ -197,6 +198,7 @@ const videoWorkspaceTaskSchema = videoTaskResponseSchema.extend({
   referenceVideos: z.array(z.string()).optional(),
   referenceAudio: z.array(z.string()).optional(),
   createdAt: z.number(),
+  finishedAt: z.number().optional(),
 })
 
 export const workspaceSchema = z.object({

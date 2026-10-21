@@ -91,12 +91,17 @@ describe('media workspace storage', () => {
     assert.equal(workspace.video.tasks.length, 1)
   })
 
-  test('removes workspace data when playground data is cleared', () => {
+  test('preserves image and video history when playground data is cleared', () => {
+    saveImageWorkspaceResult({
+      data: [{ url: 'https://example.com/preserved.png' }],
+    })
     saveVideoWorkspaceTask({ task_id: 'task_123', status: 'queued' })
 
     clearPlaygroundData()
 
-    assert.equal(localStorage.getItem(STORAGE_KEYS.WORKSPACE), null)
+    assert.equal(loadImageWorkspaceItems().length, 1)
+    assert.equal(loadVideoWorkspaceTasks().length, 1)
+    assert.ok(localStorage.getItem(STORAGE_KEYS.WORKSPACE))
   })
 
   test('keeps multiple image records and removes only the selected record', () => {
@@ -167,6 +172,8 @@ describe('media workspace storage', () => {
       status: 'processing',
     })
     saveImageWorkspaceTask({
+      completed_at: 130,
+      created_at: 100,
       data: [{ url: 'https://example.com/completed.png' }],
       id: 'image_task_1',
       object: 'image.task',
@@ -178,6 +185,8 @@ describe('media workspace storage', () => {
     assert.equal(items.length, 1)
     assert.equal(items[0]?.taskId, 'image_task_1')
     assert.equal(items[0]?.status, 'completed')
+    assert.equal(items[0]?.createdAt, 100_000)
+    assert.equal(items[0]?.finishedAt, 130_000)
     assert.equal(items[0]?.prompt, metadata.prompt)
     assert.deepEqual(items[0]?.referenceImages, metadata.referenceImages)
     assert.deepEqual(items[0]?.data, [
@@ -270,5 +279,34 @@ describe('media workspace storage', () => {
 
     clearVideoWorkspaceTasks()
     assert.deepEqual(loadVideoWorkspaceTasks(), [])
+  })
+
+  test('records video submission and completion times from the task response', () => {
+    saveVideoWorkspaceTask(
+      {
+        created_at: 200,
+        status: 'queued',
+        task_id: 'task_timed',
+      },
+      {
+        aspectRatio: '16:9',
+        group: 'default',
+        model: 'video-model',
+        n: 1,
+        prompt: 'timed video',
+        seconds: '5',
+      }
+    )
+    saveVideoWorkspaceTask({
+      completed_at: 245,
+      created_at: 200,
+      processing_time: 45,
+      status: 'succeeded',
+      task_id: 'task_timed',
+    })
+
+    const task = loadVideoWorkspaceTasks()[0]
+    assert.equal(task?.createdAt, 200_000)
+    assert.equal(task?.finishedAt, 245_000)
   })
 })

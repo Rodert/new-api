@@ -74,6 +74,7 @@ export type ImageWorkspaceItem = {
   qualityPreset: string
   n: number
   createdAt: number
+  finishedAt?: number
   status: 'queued' | 'processing' | 'completed' | 'failed'
   progress?: number | string
   error?: ImageTaskResponse['error']
@@ -106,6 +107,7 @@ export type VideoWorkspaceTask = VideoTaskResponse & {
   referenceVideos?: string[]
   referenceAudio?: string[]
   createdAt: number
+  finishedAt?: number
 }
 
 export type ImageWorkspaceMetadata = {
@@ -225,6 +227,13 @@ function createWorkspace(): PlaygroundWorkspace {
 
 function createWorkspaceItemID(): string {
   return crypto.randomUUID()
+}
+
+function toEpochMilliseconds(timestamp?: number): number | undefined {
+  if (!timestamp || !Number.isFinite(timestamp) || timestamp <= 0) {
+    return undefined
+  }
+  return timestamp < 1_000_000_000_000 ? timestamp * 1000 : timestamp
 }
 
 function migrateLegacyWorkspace(value: unknown): PlaygroundWorkspace {
@@ -738,6 +747,7 @@ export function saveImageWorkspaceResult(
             response_format: 'url',
           }
         : workspace.image.config
+      const now = Date.now()
       const item: ImageWorkspaceItem = {
         id: createWorkspaceItemID(),
         prompt: metadata?.prompt ?? '',
@@ -746,7 +756,8 @@ export function saveImageWorkspaceResult(
         aspectRatio: imageConfig.aspectRatio,
         qualityPreset: imageConfig.qualityPreset,
         n: imageConfig.n,
-        createdAt: Date.now(),
+        createdAt: now,
+        finishedAt: now,
         status: 'completed',
         size: metadata?.size,
         referenceImages: metadata?.referenceImages,
@@ -813,7 +824,15 @@ export function saveImageWorkspaceTask(
           existingItem?.qualityPreset ??
           imageConfig.qualityPreset,
         n: metadata?.n ?? existingItem?.n ?? imageConfig.n,
-        createdAt: existingItem?.createdAt ?? Date.now(),
+        createdAt:
+          toEpochMilliseconds(imageTask.created_at) ??
+          existingItem?.createdAt ??
+          Date.now(),
+        finishedAt:
+          existingItem?.finishedAt ??
+          (imageTask.status === 'completed' || imageTask.status === 'failed'
+            ? (toEpochMilliseconds(imageTask.completed_at) ?? Date.now())
+            : undefined),
         status: imageTask.status,
         progress: imageTask.progress ?? existingItem?.progress,
         error: imageTask.error ?? existingItem?.error,
@@ -928,6 +947,15 @@ export function saveVideoWorkspaceTask(
       const existingTask = workspace.video.tasks.find(
         (task) => task.taskId === taskId
       )
+      const status = videoTask.status?.toLowerCase()
+      const isTerminal =
+        status === 'succeeded' ||
+        status === 'success' ||
+        status === 'completed' ||
+        status === 'failed' ||
+        status === 'error' ||
+        status === 'cancelled' ||
+        status === 'canceled'
       const item: VideoWorkspaceTask = {
         ...existingTask,
         ...videoTask,
@@ -954,7 +982,17 @@ export function saveVideoWorkspaceTask(
           metadata?.referenceVideos ?? existingTask?.referenceVideos,
         referenceAudio:
           metadata?.referenceAudio ?? existingTask?.referenceAudio,
-        createdAt: existingTask?.createdAt ?? Date.now(),
+        createdAt:
+          toEpochMilliseconds(videoTask.created_at) ??
+          existingTask?.createdAt ??
+          Date.now(),
+        finishedAt:
+          existingTask?.finishedAt ??
+          (isTerminal
+            ? (toEpochMilliseconds(
+                videoTask.completed_at ?? videoTask.failed_at
+              ) ?? Date.now())
+            : undefined),
       }
 
       return {
@@ -1012,16 +1050,20 @@ export function savePlaygroundMode(mode: PlaygroundMode): void {
   }
 }
 
-/**
- * Clear all playground data
- */
+/** Clear chat state while preserving explicitly managed media history. */
 export function clearPlaygroundData(): void {
-  volatileImageWorkspaceItems = []
   try {
     localStorage.removeItem(STORAGE_KEYS.CONFIG)
     localStorage.removeItem(STORAGE_KEYS.PARAMETER_ENABLED)
     localStorage.removeItem(STORAGE_KEYS.MESSAGES)
-    localStorage.removeItem(STORAGE_KEYS.WORKSPACE)
+    updateWorkspace((workspace) => {
+      const defaults = createWorkspace()
+      return {
+        ...workspace,
+        mode: 'chat',
+        chat: defaults.chat,
+      }
+    })
   } catch (error) {
     // eslint-disable-next-line no-console
     console.error('Failed to clear playground data:', error)

@@ -24,6 +24,7 @@ const PRESERVED_LOCAL_STORAGE_KEYS = new Set([
   'uid',
   'aff',
   'oauth:binding:result',
+  'playground_workspace_v1',
 ])
 
 export function initializeFrontendCache(): void {

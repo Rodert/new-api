@@ -87,6 +87,30 @@ function MetadataValue(props: { label: string; value: string | number }) {
   )
 }
 
+function formatGenerationDuration(
+  createdAt: number,
+  finishedAt: number | undefined,
+  isTerminal: boolean,
+  processingTimeSeconds?: number
+): string | undefined {
+  if (
+    processingTimeSeconds !== undefined &&
+    Number.isFinite(processingTimeSeconds) &&
+    processingTimeSeconds >= 0
+  ) {
+    return processingTimeSeconds < 60
+      ? processingTimeSeconds.toFixed(1).replace(/\.0$/, '')
+      : String(Math.round(processingTimeSeconds))
+  }
+
+  if (isTerminal && finishedAt === undefined) return undefined
+  const endTime = finishedAt ?? Date.now()
+  const seconds = Math.max(0, endTime - createdAt) / 1000
+  return seconds < 60
+    ? seconds.toFixed(1).replace(/\.0$/, '')
+    : String(Math.round(seconds))
+}
+
 function RecordActions(props: HistoryActionsProps) {
   const { t } = useTranslation()
 
@@ -142,6 +166,11 @@ function ImageGenerationCard(props: ImageGenerationCardProps) {
     typeof props.item.progress === 'string'
       ? props.item.progress
       : `${props.item.progress ?? 0}%`
+  const generationDuration = formatGenerationDuration(
+    props.item.createdAt,
+    props.item.finishedAt,
+    isCompleted || isFailed
+  )
 
   return (
     <article className='bg-background overflow-hidden rounded-lg border'>
@@ -184,6 +213,18 @@ function ImageGenerationCard(props: ImageGenerationCardProps) {
             value={props.item.qualityPreset}
           />
           <MetadataValue label={t('Quantity')} value={props.item.n} />
+          <MetadataValue
+            label={t('Created')}
+            value={new Date(props.item.createdAt).toLocaleString()}
+          />
+          <MetadataValue
+            label={t('Duration')}
+            value={
+              generationDuration === undefined
+                ? '-'
+                : t('{{value}}s', { value: generationDuration })
+            }
+          />
         </dl>
         {props.item.referenceImages?.length ? (
           <p className='text-muted-foreground text-xs'>
@@ -315,6 +356,12 @@ function VideoGenerationCard(props: VideoGenerationCardProps) {
   if (isCompleted) statusLabel = t('Completed')
   if (isFailed) statusLabel = t('Failed')
   if (status === 'queued') statusLabel = t('Queued')
+  const generationDuration = formatGenerationDuration(
+    props.task.createdAt,
+    props.task.finishedAt,
+    isCompleted || isFailed,
+    props.task.processing_time
+  )
 
   return (
     <article className='bg-background overflow-hidden rounded-lg border'>
@@ -343,12 +390,24 @@ function VideoGenerationCard(props: VideoGenerationCardProps) {
             value={props.task.aspectRatio}
           />
           <MetadataValue
-            label={t('Duration')}
+            label={t('Video length in seconds')}
             value={`${props.task.seconds}s`}
           />
           <MetadataValue
             label={t('Resolution')}
             value={props.task.resolution ?? '-'}
+          />
+          <MetadataValue
+            label={t('Created')}
+            value={new Date(props.task.createdAt).toLocaleString()}
+          />
+          <MetadataValue
+            label={t('Duration')}
+            value={
+              generationDuration === undefined
+                ? '-'
+                : t('{{value}}s', { value: generationDuration })
+            }
           />
         </dl>
         <div className='text-muted-foreground flex flex-wrap gap-x-3 gap-y-1 text-xs'>
