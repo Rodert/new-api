@@ -80,3 +80,50 @@ test('regenerating a saved image after reload sends every persisted reference UR
     )
   )
 })
+
+test.each(['generate', 'regenerate'])(
+  '%s without references omits images for text-to-image generation',
+  async (action) => {
+    if (action === 'regenerate') {
+      saveImageWorkspaceResult(
+        { data: [{ url: 'https://example.com/result.png' }] },
+        {
+          model: 'gpt-image-2',
+          group: 'default',
+          prompt: 'Draw a cat',
+          aspectRatio: '1:1',
+          qualityPreset: 'auto',
+          n: 1,
+          size: '1024x1024',
+          referenceImages: [],
+        }
+      )
+    }
+    const post = vi.spyOn(api, 'post').mockResolvedValue({
+      data: { id: 'task-text', status: 'queued' },
+    })
+    render(
+      <ImageWorkspace
+        config={{ ...DEFAULT_CONFIG, model: 'gpt-image-2', group: 'default' }}
+        groups={[]}
+        models={[]}
+        isModelLoading={false}
+        onConfigChange={() => undefined}
+      />
+    )
+    if (action === 'generate') {
+      fireEvent.change(screen.getByRole('textbox'), {
+        target: { value: 'Draw a cat' },
+      })
+      fireEvent.click(screen.getByRole('button', { name: 'Create image' }))
+    } else {
+      fireEvent.click(screen.getByRole('button', { name: 'Regenerate' }))
+    }
+    await waitFor(() => expect(post).toHaveBeenCalled())
+    expect(post.mock.calls[0][1]).toMatchObject({
+      model: 'gpt-image-2',
+      prompt: 'Draw a cat',
+    })
+    expect(post.mock.calls[0][1]).not.toHaveProperty('images')
+  }
+)

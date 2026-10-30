@@ -219,7 +219,9 @@ export function ImageWorkspace({
         prompt: prompt.trim(),
         n: requestedQuantity,
         size,
-        images: referenceImages.map((image_url) => ({ image_url })),
+        ...(referenceImages.length > 0
+          ? { images: referenceImages.map((image_url) => ({ image_url })) }
+          : {}),
         ...(quality !== 'auto' ? { quality } : {}),
       },
       {
@@ -262,7 +264,9 @@ export function ImageWorkspace({
         prompt: item.prompt,
         n: requestedQuantity,
         size: itemSize,
-        images: itemReferences.map(({ url }) => ({ image_url: url })),
+        ...(itemReferences.length > 0
+          ? { images: itemReferences.map(({ url }) => ({ image_url: url })) }
+          : {}),
         ...(item.qualityPreset !== 'auto'
           ? { quality: item.qualityPreset }
           : {}),

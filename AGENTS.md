@@ -45,6 +45,7 @@ This is an AI API gateway/proxy built with Go. It aggregates 40+ upstream AI pro
 
 ### Common Code Quality
 
+- Before changing image/video generation, playground history, task execution, or billing, read [Common regression pitfalls](docs/development/common-regression-pitfalls.md). Apply the relevant checklist and regression cases before reporting completion; extend it when a new recurring failure is confirmed. This supplements, and does not replace, the mandatory billing read gate below.
 - New code should stay direct and readable. Prefer early returns, clear branches, and well-named local variables to deep nesting or layered control flow.
 - Minimize nested function definitions. Use them only when required by a callback API or when keeping the closure local is clearly simpler than adding another symbol.
 - Avoid adding package-level or module-level helper functions that have only one caller and do not express a stable business concept. Inline that logic at the call site instead.
