@@ -3,6 +3,8 @@ package controller
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -10,6 +12,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/textproto"
+	"net/url"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -34,6 +37,7 @@ import (
 
 const asyncImageTaskBatchSize = 100
 const maxAsyncGeneratedImageSize = 50 << 20
+const maxAsyncImageReferences = 10
 
 type imageTaskPayload struct {
 	Request    dto.ImageRequest     `json:"request"`
@@ -46,6 +50,10 @@ type imageTaskReference struct {
 	URL         string `json:"url"`
 	Filename    string `json:"filename"`
 	ContentType string `json:"content_type"`
+}
+
+type imageTaskInputReference struct {
+	ImageURL string `json:"image_url"`
 }
 
 type imageTaskResult struct {
@@ -71,7 +79,8 @@ func CreateImageTask(c *gin.Context) {
 	}
 	action := constant.TaskActionImageGeneration
 	contentType := c.GetHeader("Content-Type")
-	if strings.Contains(contentType, "multipart/form-data") {
+	isMultipart := strings.Contains(contentType, "multipart/form-data")
+	if isMultipart {
 		action = constant.TaskActionImageEdit
 	}
 
@@ -92,7 +101,13 @@ func CreateImageTask(c *gin.Context) {
 		respondImageTaskError(c, http.StatusBadRequest, "stream is not supported for asynchronous image tasks", "invalid_request_error")
 		return
 	}
-	if action == constant.TaskActionImageGeneration && (len(request.Image) > 0 || len(request.Images) > 0 || len(request.Mask) > 0) {
+	if !isMultipart {
+		if err := normalizeAsyncImageReferences(request); err != nil {
+			respondImageTaskError(c, http.StatusBadRequest, err.Error(), "invalid_request_error")
+			return
+		}
+	}
+	if action == constant.TaskActionImageGeneration && (len(request.Images) > 0 || len(request.Mask) > 0) {
 		action = constant.TaskActionImageEdit
 	}
 
@@ -180,6 +195,105 @@ func CreateImageTask(c *gin.Context) {
 	c.JSON(http.StatusAccepted, imageTaskResponse(task))
 }
 
+func normalizeAsyncImageReferences(request *dto.ImageRequest) error {
+	if len(request.Image) > 0 {
+		return errors.New("image is not supported for asynchronous JSON tasks; use images[].image_url")
+	}
+	for _, field := range []string{"image_url", "image_urls", "reference_images", "input_reference"} {
+		if _, exists := request.Extra[field]; exists {
+			return fmt.Errorf("%s is not supported for asynchronous JSON tasks; use images[].image_url", field)
+		}
+	}
+	if len(request.Images) == 0 {
+		if len(request.Mask) > 0 {
+			return errors.New("mask requires images[].image_url")
+		}
+		return nil
+	}
+
+	var rawReferences []map[string]json.RawMessage
+	if err := common.Unmarshal(request.Images, &rawReferences); err != nil {
+		return errors.New("images must be an array of objects containing image_url")
+	}
+	if len(rawReferences) == 0 {
+		return errors.New("images must contain at least one reference image")
+	}
+	if len(rawReferences) > maxAsyncImageReferences {
+		return fmt.Errorf("images supports at most %d reference images", maxAsyncImageReferences)
+	}
+
+	references := make([]imageTaskInputReference, 0, len(rawReferences))
+	for index, rawReference := range rawReferences {
+		if len(rawReference) != 1 {
+			return fmt.Errorf("images[%d] must contain only image_url", index)
+		}
+		rawImageURL, exists := rawReference["image_url"]
+		if !exists {
+			return fmt.Errorf("images[%d].image_url is required", index)
+		}
+		var imageURL string
+		if err := common.Unmarshal(rawImageURL, &imageURL); err != nil {
+			return fmt.Errorf("images[%d].image_url must be a string", index)
+		}
+		imageURL = strings.TrimSpace(imageURL)
+		if err := validateAsyncImageReferenceURL(imageURL); err != nil {
+			return fmt.Errorf("images[%d].image_url is invalid: %w", index, err)
+		}
+		references = append(references, imageTaskInputReference{ImageURL: imageURL})
+	}
+
+	normalized, err := common.Marshal(references)
+	if err != nil {
+		return fmt.Errorf("marshal image references: %w", err)
+	}
+	request.Images = normalized
+	return nil
+}
+
+func validateAsyncImageReferenceURL(imageURL string) error {
+	if imageURL == "" {
+		return errors.New("value is required")
+	}
+	lowerImageURL := strings.ToLower(imageURL)
+	if strings.HasPrefix(lowerImageURL, "data:") {
+		metadata, encoded, found := strings.Cut(imageURL, ",")
+		if !found {
+			return errors.New("data URL payload is required")
+		}
+		declaredContentType := ""
+		switch strings.ToLower(metadata) {
+		case "data:image/jpeg;base64":
+			declaredContentType = "image/jpeg"
+		case "data:image/png;base64":
+			declaredContentType = "image/png"
+		case "data:image/webp;base64":
+			declaredContentType = "image/webp"
+		default:
+			return errors.New("data URL must contain a base64-encoded PNG, JPEG, or WebP image")
+		}
+		if len(encoded) > base64.StdEncoding.EncodedLen(maxImageAssetSize) {
+			return errors.New("data URL image must be no larger than 10 MB")
+		}
+		decoded, err := base64.StdEncoding.DecodeString(encoded)
+		if err != nil || len(decoded) == 0 {
+			return errors.New("data URL contains invalid base64 image data")
+		}
+		if len(decoded) > maxImageAssetSize {
+			return errors.New("data URL image must be no larger than 10 MB")
+		}
+		if http.DetectContentType(decoded) != declaredContentType {
+			return errors.New("data URL content does not match its image media type")
+		}
+		return nil
+	}
+
+	parsed, err := url.Parse(imageURL)
+	if err != nil || parsed.Scheme != "https" || parsed.Host == "" {
+		return errors.New("value must be a public HTTPS URL or image data URL")
+	}
+	return nil
+}
+
 func GetImageTask(c *gin.Context) {
 	task, exists, err := model.GetByTaskId(c.GetInt("id"), c.Param("task_id"))
 	if err != nil {
@@ -237,6 +351,13 @@ func persistAsyncImageReferences(c *gin.Context) ([]imageTaskReference, error) {
 	if form == nil {
 		return nil, errors.New("image is required")
 	}
+	imageCount := len(form.File["image"]) + len(form.File["image[]"])
+	if imageCount == 0 {
+		return nil, errors.New("image is required")
+	}
+	if imageCount > maxAsyncImageReferences {
+		return nil, fmt.Errorf("images supports at most %d reference images", maxAsyncImageReferences)
+	}
 	var references []imageTaskReference
 	for _, field := range []string{"image", "image[]", "mask"} {
 		for _, file := range form.File[field] {
@@ -260,9 +381,6 @@ func persistAsyncImageReferences(c *gin.Context) ([]imageTaskReference, error) {
 			}
 			references = append(references, imageTaskReference{Field: field, URL: store.URL(key), Filename: filename, ContentType: contentType})
 		}
-	}
-	if len(references) == 0 {
-		return nil, errors.New("image is required")
 	}
 	return references, nil
 }

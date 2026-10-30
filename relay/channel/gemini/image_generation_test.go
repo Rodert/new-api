@@ -119,7 +119,7 @@ func TestConvertGeminiImageEditIncludesMultipartImage(t *testing.T) {
 	assert.Equal(t, "iVBORw0KGgo=", inlineData.Data)
 }
 
-func TestConvertGeminiImageEditIncludesJSONReferences(t *testing.T) {
+func TestConvertGeminiImageEditIncludesObjectReferences(t *testing.T) {
 	t.Parallel()
 
 	c, _ := gin.CreateTestContext(httptest.NewRecorder())
@@ -133,8 +133,7 @@ func TestConvertGeminiImageEditIncludesJSONReferences(t *testing.T) {
 	}
 	converted, err := (&Adaptor{}).ConvertImageRequest(c, info, dto.ImageRequest{
 		Prompt: "replace the sky",
-		Image:  []byte(`"data:image/png;base64,iVBORw0KGgo="`),
-		Images: []byte(`["data:image/png;base64,iVBORw0KGgo="]`),
+		Images: []byte(`[{"image_url":"data:image/png;base64,iVBORw0KGgo="},{"image_url":"data:image/png;base64,iVBORw0KGgo="}]`),
 	})
 	require.NoError(t, err)
 	payload, ok := converted.(dto.GeminiChatRequest)

@@ -2,7 +2,6 @@ package gemini
 
 import (
 	"encoding/base64"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -224,20 +223,14 @@ func geminiEditImageParts(c *gin.Context, request dto.ImageRequest) ([]dto.Gemin
 
 func geminiJSONImageParts(c *gin.Context, request dto.ImageRequest) ([]dto.GeminiPart, error) {
 	sources := make([]string, 0)
-	for _, raw := range []json.RawMessage{request.Image, request.Images} {
-		if len(raw) == 0 {
-			continue
-		}
-		var one string
-		if err := common.Unmarshal(raw, &one); err == nil {
-			sources = append(sources, one)
-			continue
-		}
-		var many []string
-		if err := common.Unmarshal(raw, &many); err != nil {
-			return nil, errors.New("Gemini image editing requires image references as URL or data URL strings")
-		}
-		sources = append(sources, many...)
+	var references []struct {
+		ImageURL string `json:"image_url"`
+	}
+	if err := common.Unmarshal(request.Images, &references); err != nil {
+		return nil, errors.New("Gemini image editing requires images[].image_url references")
+	}
+	for _, reference := range references {
+		sources = append(sources, reference.ImageURL)
 	}
 
 	parts := make([]dto.GeminiPart, 0, len(sources))
