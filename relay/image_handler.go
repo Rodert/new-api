@@ -133,8 +133,21 @@ func ExecuteImage(c *gin.Context, info *relaycommon.RelayInfo, settleBilling boo
 		defer closer.Close()
 		requestBody = body
 	}
-	if billingErr := service.PrepareImageBillingForRequest(c, info, imageCount); billingErr != nil {
-		return nil, nil, billingErr
+	if settleBilling {
+		if billingErr := service.PrepareImageBillingForRequest(c, info, imageCount); billingErr != nil {
+			return nil, nil, billingErr
+		}
+	} else {
+		reservedCount, err := imageReq.ImageCount(false)
+		if err != nil || imageCount > reservedCount {
+			return nil, nil, types.NewErrorWithStatusCode(fmt.Errorf("async image quantity cannot exceed the reserved request count"), types.ErrorCodeInvalidRequest, http.StatusBadRequest, types.ErrOptionWithSkipRetry())
+		}
+		// Async tasks already reserved their quota when they were created.
+		// Keep the outbound quantity for settlement without reserving it twice.
+		info.ImageRequestCount = imageCount
+		if info.PriceData.UsePrice {
+			info.PriceData.AddOtherRatio("n", float64(imageCount))
+		}
 	}
 
 	statusCodeMappingStr := c.GetString("status_code_mapping")

@@ -8,6 +8,7 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -112,6 +113,9 @@ func TestBuildRequestBodyIncludesReferenceImages(t *testing.T) {
 }
 
 func TestEstimateBillingUsesEffectiveSeconds(t *testing.T) {
+	oldModes := ratio_setting.VideoBillingMode2JSONString()
+	t.Cleanup(func() { require.NoError(t, ratio_setting.UpdateVideoBillingModeByJSONString(oldModes)) })
+	require.NoError(t, ratio_setting.UpdateVideoBillingModeByJSONString(`{"per-second":"per_second"}`))
 	for _, test := range []struct {
 		name          string
 		request       relaycommon.TaskSubmitReq
@@ -140,10 +144,17 @@ func TestEstimateBillingUsesEffectiveSeconds(t *testing.T) {
 			ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
 			ctx.Set("task_request", test.request)
 
-			got := (&TaskAdaptor{}).EstimateBilling(ctx, &relaycommon.RelayInfo{TaskRelayInfo: &relaycommon.TaskRelayInfo{}, ChannelMeta: &relaycommon.ChannelMeta{
+			got := (&TaskAdaptor{}).EstimateBilling(ctx, &relaycommon.RelayInfo{OriginModelName: "per-second", TaskRelayInfo: &relaycommon.TaskRelayInfo{}, ChannelMeta: &relaycommon.ChannelMeta{
 				UpstreamModelName: test.upstreamModel,
 			}})
 			assert.Equal(t, map[string]float64{"seconds": test.wantSeconds}, got)
 		})
 	}
+}
+
+func TestEstimateBillingPerRequestIgnoresDuration(t *testing.T) {
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	ctx.Set("task_request", relaycommon.TaskSubmitReq{Seconds: "15"})
+	got := (&TaskAdaptor{}).EstimateBilling(ctx, &relaycommon.RelayInfo{OriginModelName: "per-request", ChannelMeta: &relaycommon.ChannelMeta{UpstreamModelName: "grok-video-1.5"}})
+	assert.Empty(t, got)
 }

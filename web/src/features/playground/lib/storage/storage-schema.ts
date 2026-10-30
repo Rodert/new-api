@@ -148,7 +148,7 @@ const videoTaskResponseSchema = z
     object: z.string().optional(),
     model: z.string().optional(),
     status: z.string().optional(),
-    progress: z.number().optional(),
+    progress: z.union([z.number(), z.string()]).optional(),
     created_at: z.number().optional(),
     completed_at: z.number().optional(),
     failed_at: z.number().optional(),
@@ -165,12 +165,14 @@ const videoTaskResponseSchema = z
         thumbnail_url: z.string().nullable().optional(),
         video_url: z.string().optional(),
       })
+      .nullable()
       .optional(),
     error: z
       .object({
         code: z.string().optional(),
         message: z.string().optional(),
       })
+      .nullable()
       .optional(),
   })
   .passthrough()
@@ -185,6 +187,7 @@ const videoWorkspaceConfigSchema = z.object({
 })
 
 const videoWorkspaceTaskSchema = videoTaskResponseSchema.extend({
+  grokVideoImageMode: z.enum(['first_frame', 'reference']).optional(),
   id: z.string(),
   taskId: z.string(),
   model: z.string(),
@@ -211,10 +214,10 @@ export const workspaceSchema = z.object({
   }),
   image: z.object({
     config: imageWorkspaceConfigSchema,
-    items: z.array(imageWorkspaceItemSchema).max(24),
+    items: z.array(imageWorkspaceItemSchema),
   }),
   video: z.object({
     config: videoWorkspaceConfigSchema,
-    tasks: z.array(videoWorkspaceTaskSchema).max(24),
+    tasks: z.array(videoWorkspaceTaskSchema),
   }),
 })

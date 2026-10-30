@@ -120,6 +120,7 @@ export interface ChatCompletionResponse {
 }
 
 export interface ImageGenerationRequest {
+  images?: Array<{ image_url: string }>
   model: string
   group?: string
   prompt: string
@@ -174,7 +175,7 @@ export interface VideoTaskResponse {
   object?: string
   model?: string
   status?: string
-  progress?: number
+  progress?: number | string
   created_at?: number
   completed_at?: number
   failed_at?: number
@@ -189,11 +190,11 @@ export interface VideoTaskResponse {
     resultUrls?: string[]
     thumbnail_url?: string | null
     video_url?: string
-  }
+  } | null
   error?: {
     code?: string
     message?: string
-  }
+  } | null
 }
 
 // Configuration types

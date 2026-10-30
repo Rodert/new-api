@@ -146,39 +146,52 @@ func validatePrompt(prompt string) *dto.TaskError {
 const MaxTaskDurationSeconds = 3600
 
 func validateTaskDurationBounds(req TaskSubmitReq) *dto.TaskError {
-	seconds := req.Duration
-	if seconds == 0 && req.Seconds != "" {
-		seconds, _ = strconv.Atoi(req.Seconds)
+	if req.Duration < 0 || req.Duration > MaxTaskDurationSeconds {
+		return createTaskError(fmt.Errorf("duration must be between 1 and %d", MaxTaskDurationSeconds), "invalid_seconds", http.StatusBadRequest, true)
 	}
-	if seconds < 0 || seconds > MaxTaskDurationSeconds {
-		return createTaskError(fmt.Errorf("seconds must be between 1 and %d", MaxTaskDurationSeconds), "invalid_seconds", http.StatusBadRequest, true)
+	if req.Seconds != "" {
+		seconds, err := strconv.Atoi(req.Seconds)
+		if err != nil || seconds < 1 || seconds > MaxTaskDurationSeconds {
+			return createTaskError(fmt.Errorf("seconds must be between 1 and %d", MaxTaskDurationSeconds), "invalid_seconds", http.StatusBadRequest, true)
+		}
 	}
 	return nil
 }
 
 func validateMultipartTaskRequest(c *gin.Context, info *RelayInfo, action string) (TaskSubmitReq, error) {
 	var req TaskSubmitReq
-	if _, err := c.MultipartForm(); err != nil {
+	form, err := common.ParseMultipartFormReusable(c)
+	if err != nil {
 		return req, err
 	}
-
-	formData := c.Request.PostForm
+	defer form.RemoveAll()
+	formData := url.Values(form.Value)
 	req = TaskSubmitReq{
-		Prompt:      formData.Get("prompt"),
-		Model:       formData.Get("model"),
-		Mode:        formData.Get("mode"),
-		Image:       formData.Get("image"),
-		Size:        formData.Get("size"),
-		AspectRatio: formData.Get("aspect_ratio"),
-		Metadata:    make(map[string]interface{}),
+		Prompt:         formData.Get("prompt"),
+		Model:          formData.Get("model"),
+		Mode:           formData.Get("mode"),
+		Image:          formData.Get("image"),
+		Size:           formData.Get("size"),
+		Resolution:     formData.Get("resolution"),
+		InputReference: formData.Get("input_reference"),
+		AspectRatio:    formData.Get("aspect_ratio"),
+		Metadata:       make(map[string]interface{}),
 	}
 
-	if durationStr := formData.Get("seconds"); durationStr != "" {
-		req.Seconds = durationStr
-		if duration, err := strconv.Atoi(durationStr); err == nil {
-			req.Duration = duration
+	req.Seconds = formData.Get("seconds")
+	if durationStr := formData.Get("duration"); durationStr != "" {
+		duration, err := strconv.Atoi(durationStr)
+		if err != nil {
+			return req, fmt.Errorf("invalid duration: %w", err)
+		}
+		req.Duration = duration
+	}
+	if metadata := formData.Get("metadata"); metadata != "" {
+		if err := common.UnmarshalJsonStr(metadata, &req.Metadata); err != nil {
+			return req, fmt.Errorf("invalid metadata: %w", err)
 		}
 	}
+	req.ImageURLs = formData["image_urls"]
 
 	if images := formData["images"]; len(images) > 0 {
 		req.Images = images
@@ -294,6 +307,7 @@ func isKnownTaskField(field string) bool {
 		"image_urls":       true,
 		"reference_images": true,
 		"resolution":       true,
+		"metadata":         true,
 	}
 	return knownFields[field]
 }
@@ -307,9 +321,7 @@ func ValidateBasicTaskRequest(c *gin.Context, info *RelayInfo, action string) *d
 		if err != nil {
 			return createTaskError(err, "invalid_multipart_form", http.StatusBadRequest, true)
 		}
-	}
-	// 为了metadata字段的兼容性，统一UnmarshalBodyReusable
-	if err := common.UnmarshalBodyReusable(c, &req); err != nil {
+	} else if err := common.UnmarshalBodyReusable(c, &req); err != nil {
 		return createTaskError(err, "invalid_request", http.StatusBadRequest, true)
 	}
 

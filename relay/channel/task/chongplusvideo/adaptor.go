@@ -159,6 +159,8 @@ func (a *TaskAdaptor) BuildRequestBody(c *gin.Context, info *relaycommon.RelayIn
 		body.Duration = &seconds
 	} else if req.Duration > 0 {
 		body.Duration = &req.Duration
+	} else {
+		body.Duration = common.GetPointer(8)
 	}
 	data, err := common.Marshal(body)
 	if err != nil {

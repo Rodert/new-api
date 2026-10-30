@@ -726,18 +726,19 @@ export function loadImageWorkspaceItems(): ImageWorkspaceItem[] {
   getUserStorageKey(STORAGE_KEYS.WORKSPACE)
   try {
     const seen = new Set<string>()
-    return [...volatileImageWorkspaceItems, ...loadWorkspace().image.items]
-      .filter((item) => {
-        const key = item.taskId ?? item.id
-        if (seen.has(key)) return false
-        seen.add(key)
-        return true
-      })
-      .slice(0, 24)
+    return [
+      ...volatileImageWorkspaceItems,
+      ...loadWorkspace().image.items,
+    ].filter((item) => {
+      const key = item.taskId ?? item.id
+      if (seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
   } catch (error) {
     // eslint-disable-next-line no-console
     console.error('Failed to load image workspace items:', error)
-    return volatileImageWorkspaceItems.slice(0, 24)
+    return volatileImageWorkspaceItems
   }
 }
 
@@ -788,16 +789,13 @@ export function saveImageWorkspaceResult(
         ...workspace,
         image: {
           config: imageConfig,
-          items: [item, ...workspace.image.items].slice(0, 24),
+          items: [item, ...workspace.image.items],
         },
       }
     })
   } catch (error) {
     if (savedItem) {
-      volatileImageWorkspaceItems = [
-        savedItem,
-        ...volatileImageWorkspaceItems,
-      ].slice(0, 24)
+      volatileImageWorkspaceItems = [savedItem, ...volatileImageWorkspaceItems]
     }
     // eslint-disable-next-line no-console
     console.error('Failed to save image workspace:', error)
@@ -870,7 +868,7 @@ export function saveImageWorkspaceTask(
             ? workspace.image.items.map((current) =>
                 current.taskId === imageTask.id ? item : current
               )
-            : [item, ...workspace.image.items].slice(0, 24),
+            : [item, ...workspace.image.items],
         },
       }
     })
@@ -884,7 +882,7 @@ export function saveImageWorkspaceTask(
         ...volatileImageWorkspaceItems.filter(
           (item) => item.taskId !== imageTask.id
         ),
-      ].slice(0, 24)
+      ]
     }
     // eslint-disable-next-line no-console
     console.error('Failed to save image workspace task:', error)
@@ -1022,7 +1020,7 @@ export function saveVideoWorkspaceTask(
             ? workspace.video.tasks.map((task) =>
                 task.taskId === taskId ? item : task
               )
-            : [item, ...workspace.video.tasks].slice(0, 24),
+            : [item, ...workspace.video.tasks],
         },
       }
     })

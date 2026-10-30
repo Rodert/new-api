@@ -22,6 +22,7 @@ import (
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/middleware"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	"github.com/QuantumNous/new-api/relay"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
@@ -175,13 +176,31 @@ func CreateImageTask(c *gin.Context) {
 	task.PrivateData.SubscriptionId = relayInfo.SubscriptionId
 	task.PrivateData.TokenId = relayInfo.TokenId
 	task.PrivateData.NodeName = common.NodeName
+	// Keep the complete image pricing contract private and frozen across worker
+	// execution. Request credentials are unnecessary for deferred settlement.
+	var billingInput *billingexpr.RequestInput
+	if relayInfo.BillingRequestInput != nil {
+		input := *relayInfo.BillingRequestInput
+		input.Headers = make(map[string]string)
+		for key, value := range relayInfo.BillingRequestInput.Headers {
+			name := strings.ToLower(key)
+			if strings.Contains(name, "authorization") || strings.Contains(name, "cookie") || strings.Contains(name, "key") || strings.Contains(name, "token") || strings.Contains(name, "secret") {
+				continue
+			}
+			input.Headers[key] = value
+		}
+		billingInput = &input
+	}
 	task.PrivateData.BillingContext = &model.TaskBillingContext{
-		ModelPrice:      relayInfo.PriceData.ModelPrice,
-		GroupRatio:      relayInfo.PriceData.GroupRatioInfo.GroupRatio,
-		ModelRatio:      relayInfo.PriceData.ModelRatio,
-		OtherRatios:     relayInfo.PriceData.OtherRatios(),
-		OriginModelName: relayInfo.OriginModelName,
-		UsePrice:        relayInfo.PriceData.UsePrice,
+		ImagePriceData:      &relayInfo.PriceData,
+		TieredSnapshot:      relayInfo.TieredBillingSnapshot,
+		BillingRequestInput: billingInput,
+		ModelPrice:          relayInfo.PriceData.ModelPrice,
+		GroupRatio:          relayInfo.PriceData.GroupRatioInfo.GroupRatio,
+		ModelRatio:          relayInfo.PriceData.ModelRatio,
+		OtherRatios:         relayInfo.PriceData.OtherRatios(),
+		OriginModelName:     relayInfo.OriginModelName,
+		UsePrice:            relayInfo.PriceData.UsePrice,
 	}
 	task.SetData(payload)
 	if err := task.Insert(); err != nil {
@@ -484,6 +503,7 @@ func executeImageTask(parent context.Context, task *model.Task) error {
 	if err != nil {
 		return fmt.Errorf("load task user: %w", err)
 	}
+	common.SetContextKey(c, constant.ContextKeyUserId, task.UserId)
 	user.WriteContext(c)
 	common.SetContextKey(c, constant.ContextKeyUsingGroup, task.Group)
 	if task.PrivateData.TokenId > 0 {
@@ -508,6 +528,7 @@ func executeImageTask(parent context.Context, task *model.Task) error {
 		return err
 	}
 	info.RelayMode = relayconstant.Path2RelayMode(path)
+	info.IsPlayground = task.PrivateData.TokenId == 0
 	info.InitChannelMeta(c)
 	info.FinalPreConsumedQuota = task.Quota
 	info.BillingSource = task.PrivateData.BillingSource
@@ -516,6 +537,14 @@ func executeImageTask(parent context.Context, task *model.Task) error {
 		info.PriceData = hosttypes.PriceData{
 			ModelPrice: bc.ModelPrice, ModelRatio: bc.ModelRatio, UsePrice: bc.UsePrice,
 			GroupRatioInfo: hosttypes.GroupRatioInfo{GroupRatio: bc.GroupRatio},
+		}
+		if bc.ImagePriceData != nil {
+			info.PriceData = *bc.ImagePriceData
+		}
+		info.TieredBillingSnapshot = bc.TieredSnapshot
+		info.BillingRequestInput = bc.BillingRequestInput
+		if bc.TieredSnapshot != nil {
+			info.SetEstimatePromptTokens(bc.TieredSnapshot.EstimatedPromptTokens)
 		}
 		info.PriceData.ReplaceOtherRatios(bc.OtherRatios)
 	}
@@ -547,12 +576,7 @@ func executeImageTask(parent context.Context, task *model.Task) error {
 	if !updated {
 		return errors.New("image task status changed during execution")
 	}
-	service.PostTextConsumeQuota(c, info, usage, logContent)
-	task.Quota = info.FinalPreConsumedQuota
-	if info.PriceData.UsePrice {
-		actualQuota := info.PriceData.ApplyOtherRatiosToFloat(info.PriceData.ModelPrice * common.QuotaPerUnit * info.PriceData.GroupRatioInfo.GroupRatio)
-		task.Quota = common.QuotaFromFloat(actualQuota)
-	}
+	task.Quota = service.PostTextConsumeQuota(c, info, usage, logContent)
 	if err := task.UpdateQuota(); err != nil {
 		common.SysError(fmt.Sprintf("failed to update completed image task quota %s: %v", task.TaskID, err))
 	}
@@ -685,7 +709,7 @@ func finishImageTaskFailure(ctx context.Context, task *model.Task, runErr error)
 	task.Status = model.TaskStatusFailure
 	task.Progress = "100%"
 	task.FinishTime = time.Now().Unix()
-	task.FailReason = common.LocalLogPreview(runErr.Error())
+	service.SetTaskUpstreamFailure(task, common.LocalLogPreview(runErr.Error()))
 	updated, err := task.UpdateWithStatus(fromStatus)
 	if err != nil || !updated {
 		common.SysError(fmt.Sprintf("failed to mark image task %s failed: %v", task.TaskID, err))

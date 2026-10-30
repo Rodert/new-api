@@ -2,6 +2,7 @@ package relay
 
 import (
 	"encoding/base64"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -771,5 +772,72 @@ export function extractUsage() { return {seconds:2}; }
 			require.NotNil(t, info.TieredBillingSnapshot)
 			assert.Equal(t, tc.expressions["retry-b::declared-model"], info.TieredBillingSnapshot.ExprString)
 		})
+	}
+}
+
+func TestNativeVideoSubmissionReservesConfiguredBillingModeBeforeUpstream(t *testing.T) {
+	service.InitHttpClient()
+	for _, provider := range []struct {
+		name, model, path, response string
+		channelType                 int
+	}{
+		{"zzone", "kling-video-v3-omni", "/v1/videos", `{"id":"upstream-video","status":"queued"}`, constant.ChannelTypeJimengZZVideo},
+		{"grok", "grok-video-1.5", "/v1/video/generations", `{"id":"upstream-video","status":"queued"}`, constant.ChannelTypeGrokVideo},
+		{"chongplus", "grok-imagine-video-1.5", "/v1/videos/generations", `{"request_id":"upstream-video","status":"queued"}`, constant.ChannelTypeChongPlusVideo},
+	} {
+		for _, perSecond := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/per_second=%v", provider.name, perSecond), func(t *testing.T) {
+				saveBillingConfig(t)
+				savedPrices, savedModes := ratio_setting.ModelPrice2JSONString(), ratio_setting.VideoBillingMode2JSONString()
+				t.Cleanup(func() {
+					require.NoError(t, ratio_setting.UpdateModelPriceByJSONString(savedPrices))
+					require.NoError(t, ratio_setting.UpdateVideoBillingModeByJSONString(savedModes))
+				})
+				require.NoError(t, config.GlobalConfig.LoadFromDB(map[string]string{"billing_setting.billing_mode": `{}`, "billing_setting.billing_expr": `{}`, "group_ratio_setting.group_ratio": `{"default":1}`}))
+				require.NoError(t, ratio_setting.UpdateModelPriceByJSONString(`{"`+provider.model+`":0.002}`))
+				modes := `{}`
+				wantQuota := 1000
+				if perSecond {
+					modes = `{"` + provider.model + `":"per_second"}`
+					wantQuota = 8000
+				}
+				require.NoError(t, ratio_setting.UpdateVideoBillingModeByJSONString(modes))
+				billing := &imageReservation{limit: 100000}
+				var requestPath, authorization string
+				var requestBody map[string]any
+				var heldAtSubmit int
+				server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					requestPath, authorization = r.URL.Path, r.Header.Get("Authorization")
+					heldAtSubmit = billing.held
+					if err := common.DecodeJson(r.Body, &requestBody); err != nil {
+						t.Error(err)
+					}
+					w.Header().Set("Content-Type", "application/json")
+					w.WriteHeader(http.StatusAccepted)
+					_, _ = w.Write([]byte(provider.response))
+				}))
+				defer server.Close()
+				c, info := newTaskSubmitContext(t, provider.model, "")
+				c.Request = httptest.NewRequest(http.MethodPost, "/v1/videos", strings.NewReader(`{"model":"`+provider.model+`","prompt":"cat","seconds":"8","resolution":"720p"}`))
+				c.Request.Header.Set("Content-Type", "application/json")
+				common.SetContextKey(c, constant.ContextKeyChannelBaseUrl, server.URL)
+				common.SetContextKey(c, constant.ContextKeyChannelType, provider.channelType)
+				common.SetContextKey(c, constant.ContextKeyChannelKey, "provider-key")
+				c.Set("group", "default")
+				c.Set("platform", strconv.Itoa(provider.channelType))
+				info.ChannelMeta = &relaycommon.ChannelMeta{}
+				info.UserGroup, info.UsingGroup, info.OriginModelName = "default", "default", provider.model
+				info.Billing = billing
+				result, taskErr := RelayTaskSubmit(c, info)
+				require.Nil(t, taskErr, "%+v", taskErr)
+				require.NotNil(t, result)
+				assert.Equal(t, wantQuota, heldAtSubmit)
+				assert.Equal(t, wantQuota, result.Quota)
+				assert.Equal(t, provider.path, requestPath)
+				assert.Equal(t, "Bearer provider-key", authorization)
+				assert.Equal(t, provider.model, requestBody["model"])
+				assert.Equal(t, "upstream-video", result.UpstreamTaskID)
+			})
+		}
 	}
 }

@@ -1,6 +1,8 @@
 package common
 
 import (
+	"bytes"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -112,6 +114,21 @@ func TestTaskDurationBounds(t *testing.T) {
 			wantErr: true,
 		},
 		{
+			name:    "seconds cannot bypass bounds with a valid duration",
+			body:    `{"model":"sora-2","prompt":"a cat","duration":8,"seconds":"999999999999999999999999"}`,
+			wantErr: true,
+		},
+		{
+			name:    "non-numeric seconds is rejected",
+			body:    `{"model":"sora-2","prompt":"a cat","seconds":"auto"}`,
+			wantErr: true,
+		},
+		{
+			name:    "explicit zero seconds is rejected",
+			body:    `{"model":"sora-2","prompt":"a cat","seconds":"0"}`,
+			wantErr: true,
+		},
+		{
 			name: "normal duration is accepted",
 			body: `{"model":"sora-2","prompt":"a cat","seconds":"8"}`,
 		},
@@ -139,4 +156,23 @@ func TestTaskDurationBounds(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestMultipartVideoRequestPreservesReferencesDurationAndMetadata(t *testing.T) {
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	for field, value := range map[string]string{"model": "grok-video-1.5", "prompt": "cat", "duration": "8", "resolution": "720p", "image_urls": "https://example.com/cat.png", "metadata": `{"seed":42}`} {
+		require.NoError(t, writer.WriteField(field, value))
+	}
+	require.NoError(t, writer.Close())
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/videos", &body)
+	c.Request.Header.Set("Content-Type", writer.FormDataContentType())
+	require.Nil(t, ValidateBasicTaskRequest(c, &RelayInfo{TaskRelayInfo: &TaskRelayInfo{}}, constant.TaskActionGenerate))
+	request, err := GetTaskRequest(c)
+	require.NoError(t, err)
+	assert.Equal(t, 8, request.Duration)
+	assert.Equal(t, "720p", request.Resolution)
+	assert.Equal(t, []string{"https://example.com/cat.png"}, request.ImageURLs)
+	assert.Equal(t, float64(42), request.Metadata["seed"])
 }

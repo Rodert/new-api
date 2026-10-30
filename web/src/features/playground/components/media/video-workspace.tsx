@@ -63,7 +63,12 @@ import type {
   VideoWorkspaceMetadata,
   VideoWorkspaceTask,
 } from '../../lib/storage/storage'
-import type { GroupOption, ModelOption, PlaygroundConfig } from '../../types'
+import type {
+  GroupOption,
+  ModelOption,
+  PlaygroundConfig,
+  VideoGenerationRequest,
+} from '../../types'
 import { VideoGenerationHistory } from './media-generation-history'
 
 type VideoWorkspaceProps = {
@@ -102,10 +107,12 @@ const defaultVideoDurationOptions = [5, 10, 15].map((value) => ({
   label: `${value}s`,
   value: String(value),
 }))
-const grokVideo15DurationOptions = [4, 6, 8, 10, 12, 15].map((value) => ({
-  label: `${value}s`,
-  value: String(value),
-}))
+const grokImagineVideo15DurationOptions = [4, 6, 8, 10, 12, 15].map(
+  (value) => ({
+    label: `${value}s`,
+    value: String(value),
+  })
+)
 const seedance25DurationOptions = Array.from({ length: 27 }, (_, index) => {
   const value = index + 4
   return { label: `${value}s`, value: String(value) }
@@ -189,21 +196,20 @@ export function VideoWorkspace({
     config.model === 'kling-video-v3-turbo'
   ) {
     durationOptions = klingVideoDurationOptions
-  } else if (
-    config.model === 'grok-video-1.5' ||
-    grokImagineVideo15Models.has(config.model)
-  ) {
-    durationOptions = grokVideo15DurationOptions
+  } else if (config.model === 'grok-video-1.5') {
+    durationOptions = grokImagineVideo15DurationOptions.filter(
+      (option) => option.value !== '4'
+    )
+  } else if (grokImagineVideo15Models.has(config.model)) {
+    durationOptions = grokImagineVideo15DurationOptions
   }
   const mediaLimits = mediaLimitsByModel[config.model] ?? defaultMediaLimits
   const isGrokImagineVideo15 = grokImagineVideo15Models.has(config.model)
   const isGrokVideo15ReferenceMode =
     isGrokImagineVideo15 && grokVideoImageMode === 'reference'
-  const imageLimit = isGrokVideo15ReferenceMode
-    ? 7
-    : isGrokImagineVideo15
-      ? 1
-      : mediaLimits.images
+  let imageLimit = mediaLimits.images
+  if (isGrokVideo15ReferenceMode) imageLimit = 7
+  else if (isGrokImagineVideo15) imageLimit = 1
   const baseResolutionOptions =
     videoResolutionOptionsByModel[config.model] ?? emptyResolutionOptions
   const resolutionOptions = isGrokVideo15ReferenceMode
@@ -243,23 +249,34 @@ export function VideoWorkspace({
 
     let cancelled = false
 
-    const timer = window.setInterval(() => {
-      void Promise.all(pendingTaskIDs.map((taskID) => getVideoTask(taskID)))
-        .then((responses) => {
-          if (cancelled) return
-          responses.forEach((response) => saveVideoWorkspaceTask(response))
-          setTasks(loadVideoWorkspaceTasks())
-        })
-        .catch((error) => {
+    let timer: number | undefined
+    let hasReportedError = false
+    const poll = async () => {
+      const responses = await Promise.allSettled(
+        pendingTaskIDs.map((taskID) => getVideoTask(taskID))
+      )
+      if (cancelled) return
+      let hasUpdates = false
+      for (const response of responses) {
+        if (response.status === 'fulfilled') {
+          saveVideoWorkspaceTask(response.value)
+          hasUpdates = true
+        } else if (!hasReportedError) {
           toast.error(
-            error instanceof Error ? error.message : t('Request failed')
+            response.reason instanceof Error
+              ? response.reason.message
+              : t('Request failed')
           )
-        })
-    }, 3000)
-
+          hasReportedError = true
+        }
+      }
+      if (hasUpdates) setTasks(loadVideoWorkspaceTasks())
+      if (!cancelled) timer = window.setTimeout(poll, 3000)
+    }
+    timer = window.setTimeout(poll, 3000)
     return () => {
       cancelled = true
-      window.clearInterval(timer)
+      if (timer !== undefined) window.clearTimeout(timer)
     }
   }, [t, tasks])
 
@@ -291,6 +308,19 @@ export function VideoWorkspace({
       const isGrokImagineVideo15Task = grokImagineVideo15Models.has(
         metadata.model
       )
+      let imagePayload: Pick<
+        VideoGenerationRequest,
+        'image' | 'images' | 'reference_images'
+      > = {}
+      if (metadata.referenceImages?.length) {
+        if (!isGrokImagineVideo15Task) {
+          imagePayload = { images: metadata.referenceImages }
+        } else if (metadata.grokVideoImageMode === 'reference') {
+          imagePayload = { reference_images: metadata.referenceImages }
+        } else {
+          imagePayload = { image: metadata.referenceImages[0] }
+        }
+      }
       const response = await createVideo({
         model: metadata.model,
         group: metadata.group,
@@ -301,13 +331,7 @@ export function VideoWorkspace({
         width,
         height,
         ...(metadata.resolution ? { resolution: metadata.resolution } : {}),
-        ...(isGrokImagineVideo15Task && metadata.referenceImages?.length
-          ? metadata.grokVideoImageMode === 'reference'
-            ? { reference_images: metadata.referenceImages }
-            : { image: metadata.referenceImages[0] }
-          : metadata.referenceImages?.length
-            ? { images: metadata.referenceImages }
-            : {}),
+        ...imagePayload,
         ...(metadata.referenceVideos?.length
           ? { videos: metadata.referenceVideos }
           : {}),
@@ -332,9 +356,7 @@ export function VideoWorkspace({
       group: config.group,
       model: config.model,
       prompt: prompt.trim(),
-      grokVideoImageMode: isGrokImagineVideo15
-        ? grokVideoImageMode
-        : undefined,
+      grokVideoImageMode: isGrokImagineVideo15 ? grokVideoImageMode : undefined,
       resolution: selectedResolution,
       referenceAudio: referenceAudio.map((media) => media.url),
       referenceImages: referenceImages.map((media) => media.url),
@@ -364,10 +386,9 @@ export function VideoWorkspace({
       group: task.group,
       model: task.model,
       prompt: task.prompt,
-      grokVideoImageMode:
-        grokImagineVideo15Models.has(task.model)
-          ? (task.grokVideoImageMode ?? 'first_frame')
-          : undefined,
+      grokVideoImageMode: grokImagineVideo15Models.has(task.model)
+        ? (task.grokVideoImageMode ?? 'first_frame')
+        : undefined,
       resolution: task.resolution,
       referenceAudio: task.referenceAudio,
       referenceImages: task.referenceImages,

@@ -225,3 +225,28 @@ func TestConvertToOpenAIVideoHidesUpstreamFailureResponse(t *testing.T) {
 	assert.NotContains(t, string(data), "upstream.example")
 	assert.JSONEq(t, `{"id":"task_public","task_id":"task_public","object":"video","model":"seedance2.5","status":"failed","progress":100,"created_at":100,"completed_at":200,"error":{"message":"extra.resolution is required","code":"upstream_task_failed"}}`, string(data))
 }
+
+func TestValidateMappedModelDurationAndPerSecondRequirement(t *testing.T) {
+	oldModes := ratio_setting.VideoBillingMode2JSONString()
+	t.Cleanup(func() { require.NoError(t, ratio_setting.UpdateVideoBillingModeByJSONString(oldModes)) })
+	require.NoError(t, ratio_setting.UpdateVideoBillingModeByJSONString(`{"video-alias":"per_second"}`))
+	for _, tc := range []struct{ name, body, origin, code string }{
+		{"mapped duration exceeds model limit", `{"model":"video-alias","prompt":"cat","duration":30,"resolution":"720p"}`, "video-alias", "invalid_seconds"},
+		{"seconds required for per second", `{"model":"video-alias","prompt":"cat","resolution":"720p"}`, "video-alias", "invalid_seconds"},
+		{"duration alias accepted", `{"model":"video-alias","prompt":"cat","duration":5,"resolution":"720p"}`, "video-alias", ""},
+		{"per request may omit duration", `{"model":"video-alias","prompt":"cat","resolution":"720p"}`, "per-request", ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+			ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/videos", strings.NewReader(tc.body))
+			ctx.Request.Header.Set("Content-Type", "application/json")
+			err := (&TaskAdaptor{}).ValidateRequestAndSetAction(ctx, &relaycommon.RelayInfo{OriginModelName: tc.origin, TaskRelayInfo: &relaycommon.TaskRelayInfo{}, ChannelMeta: &relaycommon.ChannelMeta{UpstreamModelName: "kling-video-v3"}})
+			if tc.code == "" {
+				require.Nil(t, err)
+			} else {
+				require.NotNil(t, err)
+				assert.Equal(t, tc.code, err.Code)
+			}
+		})
+	}
+}

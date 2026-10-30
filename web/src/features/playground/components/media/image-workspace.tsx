@@ -72,7 +72,6 @@ type ImageWorkspaceProps = {
 }
 
 type ImageReference = {
-  file?: File
   url: string
 }
 
@@ -117,7 +116,6 @@ export function ImageWorkspace({
   const [quality, setQuality] = useState('auto')
   const [quantity, setQuantity] = useState(1)
   const [references, setReferences] = useState<ImageReference[]>([])
-  const uploadedFilesRef = useRef(new Map<string, File>())
   const [items, setItems] = useState<ImageWorkspaceItem[]>(
     loadImageWorkspaceItems
   )
@@ -180,8 +178,7 @@ export function ImageWorkspace({
       const nextReferences = await Promise.all(
         [...files].map(async (file) => {
           const url = await uploadPlaygroundAsset(file, 'image')
-          uploadedFilesRef.current.set(url, file)
-          return { file, url }
+          return { url }
         })
       )
       setReferences((current) =>
@@ -194,12 +191,11 @@ export function ImageWorkspace({
 
   const generate = async (
     request: ImageGenerationRequest,
-    metadata: ImageWorkspaceMetadata,
-    images: File[] = []
+    metadata: ImageWorkspaceMetadata
   ) => {
     setIsSubmitting(true)
     try {
-      const task = await createImageTask(request, images)
+      const task = await createImageTask(request)
       saveImageWorkspaceTask(task, metadata)
       setItems(loadImageWorkspaceItems())
     } catch (error) {
@@ -214,13 +210,6 @@ export function ImageWorkspace({
 
     const aspectRatio =
       imageSizeOptions.find((option) => option.value === size)?.label ?? '1:1'
-    const images = references.flatMap((reference) =>
-      reference.file ? [reference.file] : []
-    )
-    if (images.length !== references.length) {
-      toast.error(t('Unable to read image'))
-      return
-    }
     const referenceImages = references.map((reference) => reference.url)
     const requestedQuantity = isSingleImageModel ? 1 : quantity
     await generate(
@@ -230,6 +219,7 @@ export function ImageWorkspace({
         prompt: prompt.trim(),
         n: requestedQuantity,
         size,
+        images: referenceImages.map((image_url) => ({ image_url })),
         ...(quality !== 'auto' ? { quality } : {}),
       },
       {
@@ -241,8 +231,7 @@ export function ImageWorkspace({
         qualityPreset: quality,
         referenceImages,
         size,
-      },
-      images
+      }
     )
   }
 
@@ -262,17 +251,9 @@ export function ImageWorkspace({
     setQuality(item.qualityPreset)
     setQuantity(item.n)
     const itemReferences = (item.referenceImages ?? []).map((url) => ({
-      file: uploadedFilesRef.current.get(url),
       url,
     }))
     setReferences(itemReferences)
-    const images = itemReferences.flatMap((reference) =>
-      reference.file ? [reference.file] : []
-    )
-    if (images.length !== itemReferences.length) {
-      toast.error(t('Unable to read image'))
-      return
-    }
     const requestedQuantity = isGeminiImageModel(item.model) ? 1 : item.n
     void generate(
       {
@@ -281,6 +262,7 @@ export function ImageWorkspace({
         prompt: item.prompt,
         n: requestedQuantity,
         size: itemSize,
+        images: itemReferences.map(({ url }) => ({ image_url: url })),
         ...(item.qualityPreset !== 'auto'
           ? { quality: item.qualityPreset }
           : {}),
@@ -294,8 +276,7 @@ export function ImageWorkspace({
         qualityPreset: item.qualityPreset,
         referenceImages: item.referenceImages,
         size: itemSize,
-      },
-      images
+      }
     )
   }
 

@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
-import { describe, test } from 'node:test'
+
+import { describe, test } from 'vitest'
 
 import {
   CHANNEL_TYPE_JIMENG_ZZ_VIDEO,
@@ -37,15 +38,20 @@ describe('JimengZZVideo channel', () => {
       getKeyPromptForType(CHANNEL_TYPE_JIMENG_ZZ_VIDEO),
       'Enter API key for this channel'
     )
-    assert.equal(getChannelTypeConfig(CHANNEL_TYPE_JIMENG_ZZ_VIDEO).icon, 'Jimeng')
+    assert.equal(
+      getChannelTypeConfig(CHANNEL_TYPE_JIMENG_ZZ_VIDEO).icon,
+      'Jimeng'
+    )
   })
 
   test('requires a non-blank Base URL', () => {
-    assert.equal(channelFormSchema.safeParse(jimengZZVideoForm('  ')).success, false)
     assert.equal(
-      channelFormSchema.safeParse(
-        jimengZZVideoForm('https://upstream.example')
-      ).success,
+      channelFormSchema.safeParse(jimengZZVideoForm('  ')).success,
+      false
+    )
+    assert.equal(
+      channelFormSchema.safeParse(jimengZZVideoForm('https://upstream.example'))
+        .success,
       true
     )
   })

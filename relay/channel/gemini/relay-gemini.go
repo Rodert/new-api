@@ -529,6 +529,7 @@ func GeminiEmbeddingHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *h
 	usage := service.ResponseText2Usage(c, "", info.UpstreamModelName, info.GetEstimatePromptTokens())
 	openAIResponse.Usage = *usage
 
+	info.UpdateImageCount(int64(len(openAIResponse.Data)))
 	jsonResponse, jsonErr := common.Marshal(openAIResponse)
 	if jsonErr != nil {
 		return nil, types.NewOpenAIError(jsonErr, types.ErrorCodeBadResponseBody, http.StatusInternalServerError)
@@ -561,7 +562,7 @@ func GeminiImageHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.
 	}
 
 	for _, prediction := range geminiResponse.Predictions {
-		if prediction.RaiFilteredReason != "" {
+		if prediction.RaiFilteredReason != "" || prediction.BytesBase64Encoded == "" {
 			continue // skip filtered image
 		}
 		openAIResponse.Data = append(openAIResponse.Data, dto.ImageData{
@@ -569,6 +570,7 @@ func GeminiImageHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.
 		})
 	}
 
+	info.UpdateImageCount(int64(len(openAIResponse.Data)))
 	jsonResponse, jsonErr := common.Marshal(openAIResponse)
 	if jsonErr != nil {
 		return nil, types.NewError(jsonErr, types.ErrorCodeBadResponseBody)
@@ -630,6 +632,7 @@ func GeminiGenerateContentImageHandler(c *gin.Context, info *relaycommon.RelayIn
 		return nil, types.NewOpenAIError(errors.New("no images generated"), types.ErrorCodeEmptyResponse, http.StatusInternalServerError)
 	}
 
+	info.UpdateImageCount(int64(len(openAIResponse.Data)))
 	jsonResponse, err := common.Marshal(openAIResponse)
 	if err != nil {
 		return nil, types.NewError(err, types.ErrorCodeBadResponseBody)

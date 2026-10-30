@@ -81,7 +81,11 @@ func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycom
 	if strings.TrimSpace(req.Model) == "" {
 		return service.TaskErrorWrapperLocal(errors.New("model is required"), "missing_model", http.StatusBadRequest)
 	}
-	capabilities := getModelCapabilities(req.Model)
+	modelName := req.Model
+	if info.ChannelMeta != nil && info.UpstreamModelName != "" {
+		modelName = info.UpstreamModelName
+	}
+	capabilities := getModelCapabilities(modelName)
 	if len(req.Images) > capabilities.MaxImages {
 		return service.TaskErrorWrapperLocal(fmt.Errorf("images supports at most %d items", capabilities.MaxImages), "invalid_images", http.StatusBadRequest)
 	}
@@ -103,14 +107,15 @@ func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycom
 			}
 		}
 	}
+	seconds := req.Duration
 	if req.Seconds != "" {
-		seconds, err := strconv.Atoi(req.Seconds)
-		if err != nil || seconds < 1 || seconds > relaycommon.MaxTaskDurationSeconds {
-			return service.TaskErrorWrapperLocal(fmt.Errorf("seconds must be between 1 and %d", relaycommon.MaxTaskDurationSeconds), "invalid_seconds", http.StatusBadRequest)
-		}
-		if capabilities.MinSeconds > 0 && (seconds < capabilities.MinSeconds || seconds > capabilities.MaxSeconds) {
-			return service.TaskErrorWrapperLocal(fmt.Errorf("seconds must be between %d and %d", capabilities.MinSeconds, capabilities.MaxSeconds), "invalid_seconds", http.StatusBadRequest)
-		}
+		seconds, _ = strconv.Atoi(req.Seconds) // The common validator checked syntax and bounds.
+	}
+	if seconds == 0 && ratio_setting.GetVideoBillingMode(info.OriginModelName) == ratio_setting.VideoBillingModePerSecond {
+		return service.TaskErrorWrapperLocal(errors.New("seconds is required for per-second billing"), "invalid_seconds", http.StatusBadRequest)
+	}
+	if seconds != 0 && capabilities.MinSeconds > 0 && (seconds < capabilities.MinSeconds || seconds > capabilities.MaxSeconds) {
+		return service.TaskErrorWrapperLocal(fmt.Errorf("seconds must be between %d and %d", capabilities.MinSeconds, capabilities.MaxSeconds), "invalid_seconds", http.StatusBadRequest)
 	}
 	if len(capabilities.Resolutions) > 0 {
 		if req.Resolution == "" {

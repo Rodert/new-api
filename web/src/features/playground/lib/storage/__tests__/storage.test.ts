@@ -24,6 +24,10 @@ import { STORAGE_KEYS } from '../../../constants'
 import type { Message } from '../../../types'
 import {
   clearPlaygroundData,
+  saveImageWorkspaceResult,
+  saveVideoWorkspaceTask,
+  loadImageWorkspaceItems,
+  loadVideoWorkspaceTasks,
   loadConfig,
   loadMessages,
   loadParameterEnabled,
@@ -106,4 +110,69 @@ test('storage calls without a signed-in user do not persist shared data', () => 
   expect(loadMessages()).toBeNull()
   expect(loadParameterEnabled()).toEqual({})
   expect(localStorage.length).toBe(0)
+})
+
+test('image and video histories retain all 25 generations until explicitly cleared', () => {
+  useAuthStore.getState().auth.setUser({ id: 1, username: 'A', role: 1 })
+  for (let index = 0; index < 25; index++) {
+    saveImageWorkspaceResult({
+      data: [{ url: `https://example.com/${index}.png` }],
+    })
+    saveVideoWorkspaceTask({ id: `video-${index}`, status: 'queued' })
+  }
+  expect(loadImageWorkspaceItems()).toHaveLength(25)
+  expect(loadImageWorkspaceItems()[24].data?.[0].url).toBe(
+    'https://example.com/0.png'
+  )
+  expect(loadVideoWorkspaceTasks()).toHaveLength(25)
+  expect(loadVideoWorkspaceTasks()[24].taskId).toBe('video-0')
+  saveImageWorkspaceResult(null)
+  saveVideoWorkspaceTask(null)
+  expect(loadImageWorkspaceItems()).toEqual([])
+  expect(loadVideoWorkspaceTasks()).toEqual([])
+})
+
+test('video percentage progress and null error preserve both histories and reference mode across reloads', () => {
+  useAuthStore.getState().auth.setUser({ id: 1, username: 'A', role: 1 })
+  saveImageWorkspaceResult({ data: [{ url: 'https://example.com/image.png' }] })
+  saveVideoWorkspaceTask(
+    {
+      id: 'video-reference',
+      status: 'queued',
+      progress: '0%',
+      error: null,
+      result: null,
+    },
+    {
+      model: 'grok-image-video',
+      group: 'default',
+      prompt: 'animate',
+      aspectRatio: '9:16',
+      seconds: '10',
+      grokVideoImageMode: 'reference',
+      referenceImages: [
+        'https://example.com/one.png',
+        'https://example.com/two.png',
+      ],
+    }
+  )
+  expect(loadVideoWorkspaceTasks()).toMatchObject([
+    {
+      taskId: 'video-reference',
+      progress: '0%',
+      grokVideoImageMode: 'reference',
+      referenceImages: [
+        'https://example.com/one.png',
+        'https://example.com/two.png',
+      ],
+    },
+  ])
+  expect(loadImageWorkspaceItems()).toHaveLength(1)
+  saveVideoWorkspaceTask({
+    id: 'video-reference',
+    status: 'completed',
+    progress: 100,
+  })
+  expect(loadVideoWorkspaceTasks()).toHaveLength(1)
+  expect(loadImageWorkspaceItems()).toHaveLength(1)
 })

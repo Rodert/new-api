@@ -49,6 +49,7 @@ func TestImageRequestReservesFinalQuantityBeforeUpstream(t *testing.T) {
 	for _, tc := range []struct {
 		name, body                                    string
 		tiered, passThrough, insufficient, retryReset bool
+		async                                         bool
 		override                                      any
 		count, status                                 int
 	}{
@@ -56,6 +57,7 @@ func TestImageRequestReservesFinalQuantityBeforeUpstream(t *testing.T) {
 		{name: "legacy channel quantity override", body: `{"model":"gpt-image-2","n":1}`, override: 4, count: 4},
 		{name: "expression channel quantity override", body: `{"model":"gpt-image-2","n":1}`, override: 4, count: 4, tiered: true},
 		{name: "pass-through quantity", body: `{"model":"gpt-image-2","n":2,"parameters":{}}`, count: 2, passThrough: true},
+		{name: "async quantity cannot exceed reserved request", body: `{"model":"gpt-image-2","n":1}`, override: 4, async: true, status: http.StatusBadRequest},
 		{name: "oversized override rejected", body: `{"model":"gpt-image-2","n":1}`, override: 129, status: http.StatusBadRequest},
 		{name: "insufficient reservation blocks upstream", body: `{"model":"gpt-image-2","n":1}`, override: 4, count: 4, insufficient: true, status: http.StatusForbidden},
 		{name: "retry drops the previous attempt's quantity", body: `{"model":"gpt-image-2","n":1}`, count: 1, retryReset: true},
@@ -102,7 +104,12 @@ func TestImageRequestReservesFinalQuantityBeforeUpstream(t *testing.T) {
 				info.PriceData.AddOtherRatio("n", 4)
 				info.BillingImageCount = common.GetPointer(3)
 			}
-			apiErr := ImageHelper(c, info)
+			var apiErr *types.NewAPIError
+			if tc.async {
+				_, _, apiErr = ExecuteImage(c, info, false)
+			} else {
+				apiErr = ImageHelper(c, info)
+			}
 			require.NotNil(t, apiErr)
 			if tc.status != 0 {
 				assert.Equal(t, tc.status, apiErr.StatusCode)

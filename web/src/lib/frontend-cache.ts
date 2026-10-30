@@ -53,7 +53,11 @@ function clearLocalUiCache(): void {
   const keysToRemove: string[] = []
   for (let index = 0; index < window.localStorage.length; index += 1) {
     const key = window.localStorage.key(index)
-    if (key && !PRESERVED_LOCAL_STORAGE_KEYS.has(key)) {
+    if (
+      key &&
+      !PRESERVED_LOCAL_STORAGE_KEYS.has(key) &&
+      !key.startsWith('playground_workspace_v1:')
+    ) {
       keysToRemove.push(key)
     }
   }

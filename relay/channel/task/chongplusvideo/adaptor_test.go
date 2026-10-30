@@ -141,3 +141,20 @@ func TestValidateGrokImagineVideo15ImageModes(t *testing.T) {
 		})
 	}
 }
+
+func TestDefaultDurationMatchesPerSecondBilling(t *testing.T) {
+	oldModes := ratio_setting.VideoBillingMode2JSONString()
+	t.Cleanup(func() { require.NoError(t, ratio_setting.UpdateVideoBillingModeByJSONString(oldModes)) })
+	require.NoError(t, ratio_setting.UpdateVideoBillingModeByJSONString(`{"grok-imagine-video":"per_second"}`))
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	ctx.Set("task_request", relaycommon.TaskSubmitReq{Prompt: "cat"})
+	info := &relaycommon.RelayInfo{OriginModelName: "grok-imagine-video", ChannelMeta: &relaycommon.ChannelMeta{UpstreamModelName: "grok-imagine-video"}}
+	adaptor := &TaskAdaptor{}
+	body, err := adaptor.BuildRequestBody(ctx, info)
+	require.NoError(t, err)
+	var request requestPayload
+	require.NoError(t, common.DecodeJson(body, &request))
+	require.NotNil(t, request.Duration)
+	assert.Equal(t, 8, *request.Duration)
+	assert.Equal(t, map[string]float64{"seconds": 8}, adaptor.EstimateBilling(ctx, info))
+}

@@ -16,39 +16,32 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import assert from 'node:assert/strict'
-import { afterEach, test } from 'node:test'
-
-import { Window } from 'happy-dom'
+import { afterEach, beforeEach, expect, test } from 'vitest'
 
 import { initializeFrontendCache } from '../frontend-cache'
 
-const originalWindow = Object.getOwnPropertyDescriptor(globalThis, 'window')
+beforeEach(() => localStorage.clear())
+afterEach(() => localStorage.clear())
 
-afterEach(() => {
-  if (originalWindow) {
-    Object.defineProperty(globalThis, 'window', originalWindow)
-    return
-  }
-  Reflect.deleteProperty(globalThis, 'window')
-})
-
-test('preserves playground media history during a frontend cache reset', () => {
-  const domWindow = new Window()
-  Object.defineProperty(globalThis, 'window', {
-    configurable: true,
-    value: domWindow,
-  })
+test('a frontend cache reset preserves legacy and every account media history', () => {
   const workspace = JSON.stringify({ image: ['image'], video: ['video'] })
-  domWindow.localStorage.setItem('playground_workspace_v1', workspace)
-  domWindow.localStorage.setItem('disposable-ui-cache', 'remove me')
+  for (const key of [
+    'playground_workspace_v1',
+    'playground_workspace_v1:1',
+    'playground_workspace_v1:2',
+  ]) {
+    localStorage.setItem(key, workspace)
+  }
+  localStorage.setItem('disposable-ui-cache', 'remove me')
 
   initializeFrontendCache()
 
-  assert.equal(
-    domWindow.localStorage.getItem('playground_workspace_v1'),
-    workspace
-  )
-  assert.equal(domWindow.localStorage.getItem('disposable-ui-cache'), null)
-  domWindow.close()
+  for (const key of [
+    'playground_workspace_v1',
+    'playground_workspace_v1:1',
+    'playground_workspace_v1:2',
+  ]) {
+    expect(localStorage.getItem(key)).toBe(workspace)
+  }
+  expect(localStorage.getItem('disposable-ui-cache')).toBeNull()
 })

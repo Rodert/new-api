@@ -2,10 +2,12 @@ package gemini
 
 import (
 	"bytes"
+	"github.com/QuantumNous/new-api/types"
 	"io"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
@@ -255,4 +257,14 @@ func TestRewriteGeminiInlineImagesToURLsKeepsInlineDataWhenUploadFails(t *testin
 	assert.False(t, changed)
 	assert.Same(t, inlineData, response.Candidates[0].Content.Parts[0].InlineData)
 	assert.Nil(t, response.Candidates[0].Content.Parts[0].FileData)
+}
+
+func TestGeminiImagenChargesOnlyImagesReturnedAfterFiltering(t *testing.T) {
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	info := &relaycommon.RelayInfo{PriceData: types.PriceData{UsePrice: true}}
+	info.PriceData.AddOtherRatio("n", 2)
+	resp := &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(`{"predictions":[{"bytesBase64Encoded":"aW1hZ2U="},{"raiFilteredReason":"filtered"}]}`))}
+	_, apiErr := GeminiImageHandler(c, info, resp)
+	require.Nil(t, apiErr)
+	assert.Equal(t, float64(1), info.PriceData.OtherRatios()["n"])
 }
