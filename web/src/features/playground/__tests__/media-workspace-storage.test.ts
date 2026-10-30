@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict'
-import { afterEach, beforeEach, describe, test } from 'node:test'
+
+import { afterEach, beforeEach, describe, test } from 'vitest'
+
+import { useAuthStore } from '@/stores/auth-store'
 
 import { STORAGE_KEYS } from '../constants'
 import {
@@ -38,6 +41,9 @@ function createLocalStorage(): Storage {
 }
 
 beforeEach(() => {
+  useAuthStore
+    .getState()
+    .auth.setUser({ id: 1, username: 'media-owner', role: 1 })
   Object.defineProperty(globalThis, 'localStorage', {
     configurable: true,
     value: createLocalStorage(),
@@ -45,6 +51,7 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+  useAuthStore.getState().auth.reset()
   if (originalLocalStorage) {
     Object.defineProperty(globalThis, 'localStorage', originalLocalStorage)
     return
@@ -54,6 +61,21 @@ afterEach(() => {
 })
 
 describe('media workspace storage', () => {
+  test('isolates media between accounts and preserves the returning owner history', () => {
+    const image = { data: [{ url: 'https://example.com/private.png' }] }
+    saveImageWorkspaceResult(image)
+    saveVideoWorkspaceTask({ task_id: 'private-video', status: 'queued' })
+    useAuthStore.getState().auth.setUser({ id: 2, username: 'other', role: 1 })
+    assert.equal(loadImageWorkspaceItems().length, 0)
+    assert.equal(loadVideoWorkspaceTasks().length, 0)
+    clearPlaygroundData()
+    useAuthStore
+      .getState()
+      .auth.setUser({ id: 1, username: 'media-owner', role: 1 })
+    assert.deepEqual(loadImageWorkspaceResult(), image)
+    assert.equal(loadVideoWorkspaceTask()?.task_id, 'private-video')
+  })
+
   test('keeps image and video results in the same workspace', () => {
     const imageResult = {
       data: [{ url: 'https://example.com/generated-image.png' }],
@@ -71,7 +93,7 @@ describe('media workspace storage', () => {
     assert.equal(loadVideoWorkspaceTask()?.status, videoTask.status)
 
     const workspace = JSON.parse(
-      localStorage.getItem(STORAGE_KEYS.WORKSPACE) ?? '{}'
+      localStorage.getItem(`${STORAGE_KEYS.WORKSPACE}:1`) ?? '{}'
     ) as {
       version: number
       mode: string
@@ -101,7 +123,7 @@ describe('media workspace storage', () => {
 
     assert.equal(loadImageWorkspaceItems().length, 1)
     assert.equal(loadVideoWorkspaceTasks().length, 1)
-    assert.ok(localStorage.getItem(STORAGE_KEYS.WORKSPACE))
+    assert.ok(localStorage.getItem(`${STORAGE_KEYS.WORKSPACE}:1`))
   })
 
   test('keeps multiple image records and removes only the selected record', () => {

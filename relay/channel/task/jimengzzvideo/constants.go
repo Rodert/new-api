@@ -14,11 +14,11 @@ var ModelList = []string{
 var ChannelName = "jimeng-zz-video"
 
 type modelCapabilities struct {
-	MinSeconds int
-	MaxSeconds int
-	MaxImages  int
-	MaxVideos  int
-	MaxAudios  int
+	MinSeconds  int
+	MaxSeconds  int
+	MaxImages   int
+	MaxVideos   int
+	MaxAudios   int
 	Resolutions map[string]struct{}
 }
 

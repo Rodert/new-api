@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/i18n"
 	"github.com/QuantumNous/new-api/middleware"
 	"github.com/QuantumNous/new-api/model"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
@@ -16,7 +18,7 @@ import (
 
 func Playground(c *gin.Context) {
 	if newAPIError := preparePlaygroundRelay(c, types.RelayFormatOpenAI); newAPIError != nil {
-		c.JSON(newAPIError.StatusCode, gin.H{"error": newAPIError.ToOpenAIError()})
+		c.JSON(newAPIError.StatusCode, gin.H{"error": newAPIError.ToOpenAIError(common.UpstreamAddresses(c)...)})
 		return
 	}
 
@@ -25,7 +27,7 @@ func Playground(c *gin.Context) {
 
 func PlaygroundImage(c *gin.Context) {
 	if newAPIError := preparePlaygroundRelay(c, types.RelayFormatOpenAIImage); newAPIError != nil {
-		c.JSON(newAPIError.StatusCode, gin.H{"error": newAPIError.ToOpenAIError()})
+		c.JSON(newAPIError.StatusCode, gin.H{"error": newAPIError.ToOpenAIError(common.UpstreamAddresses(c)...)})
 		return
 	}
 
@@ -40,7 +42,7 @@ func PlaygroundCreateImageTask(c *gin.Context) {
 	c.Set("relay_mode", relayMode)
 
 	if newAPIError := preparePlaygroundRelay(c, types.RelayFormatOpenAIImage); newAPIError != nil {
-		c.JSON(newAPIError.StatusCode, gin.H{"error": newAPIError.ToOpenAIError()})
+		c.JSON(newAPIError.StatusCode, gin.H{"error": newAPIError.ToOpenAIError(common.UpstreamAddresses(c)...)})
 		return
 	}
 
@@ -49,7 +51,7 @@ func PlaygroundCreateImageTask(c *gin.Context) {
 
 func PlaygroundTask(c *gin.Context) {
 	if newAPIError := preparePlaygroundRelay(c, types.RelayFormatTask); newAPIError != nil {
-		c.JSON(newAPIError.StatusCode, gin.H{"error": newAPIError.ToOpenAIError()})
+		c.JSON(newAPIError.StatusCode, gin.H{"error": newAPIError.ToOpenAIError(common.UpstreamAddresses(c)...)})
 		return
 	}
 
@@ -58,7 +60,7 @@ func PlaygroundTask(c *gin.Context) {
 
 func PlaygroundTaskFetch(c *gin.Context) {
 	if newAPIError := preparePlaygroundRelay(c, types.RelayFormatTask); newAPIError != nil {
-		c.JSON(newAPIError.StatusCode, gin.H{"error": newAPIError.ToOpenAIError()})
+		c.JSON(newAPIError.StatusCode, gin.H{"error": newAPIError.ToOpenAIError(common.UpstreamAddresses(c)...)})
 		return
 	}
 
@@ -73,8 +75,9 @@ func preparePlaygroundRelay(c *gin.Context, relayFormat types.RelayFormat) *type
 
 	useAccessToken := c.GetBool("use_access_token")
 	if useAccessToken {
-		newAPIError = types.NewError(errors.New("暂不支持使用 access token"), types.ErrorCodeAccessDenied, types.ErrOptionWithSkipRetry())
+		newAPIError = types.NewError(errors.New(i18n.T(c, i18n.MsgRelayAccessTokenUnsupported)), types.ErrorCodeAccessDenied, types.ErrOptionWithSkipRetry())
 		return newAPIError
+
 	}
 
 	relayInfo, err := relaycommon.GenRelayInfo(c, relayFormat, nil, nil)

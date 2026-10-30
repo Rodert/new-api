@@ -183,54 +183,53 @@ func (a *TaskAdaptor) DoRequest(c *gin.Context, info *relaycommon.RelayInfo, req
 	return channel.DoTaskApiRequest(a, c, info, requestBody)
 }
 
-func (a *TaskAdaptor) DoResponse(c *gin.Context, resp *http.Response, info *relaycommon.RelayInfo) (string, []byte, *taskdto.TaskError) {
+func (a *TaskAdaptor) ParseResponse(c *gin.Context, resp *http.Response, info *relaycommon.RelayInfo) (*channel.TaskSubmitResponse, *taskdto.TaskError) {
 	responseBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return "", nil, service.TaskErrorWrapper(err, "read_response_body_failed", http.StatusInternalServerError)
+		return nil, service.TaskErrorWrapper(err, "read_response_body_failed", http.StatusInternalServerError)
 	}
 	_ = resp.Body.Close()
 
 	result, err := parseResponse(responseBody)
 	if err != nil {
-		return "", nil, service.TaskErrorWrapper(err, "unmarshal_response_body_failed", http.StatusInternalServerError)
+		return nil, service.TaskErrorWrapper(err, "unmarshal_response_body_failed", http.StatusInternalServerError)
 	}
 	var responseEnvelope responseTask
 	if err := common.Unmarshal(responseBody, &responseEnvelope); err != nil {
-		return "", nil, service.TaskErrorWrapper(err, "unmarshal_response_body_failed", http.StatusInternalServerError)
+		return nil, service.TaskErrorWrapper(err, "unmarshal_response_body_failed", http.StatusInternalServerError)
 	}
 	upstreamTaskID := result.ID
 	if upstreamTaskID == "" {
 		upstreamTaskID = result.TaskID
 	}
 	if upstreamTaskID == "" {
-		return "", nil, service.TaskErrorWrapper(errors.New("task_id is empty"), "invalid_response", http.StatusInternalServerError)
+		return nil, service.TaskErrorWrapper(errors.New("task_id is empty"), "invalid_response", http.StatusInternalServerError)
 	}
 
 	clientResponse, err := sjson.SetBytes(responseBody, "id", info.PublicTaskID)
 	if err != nil {
-		return "", nil, service.TaskErrorWrapper(err, "rewrite_response_failed", http.StatusInternalServerError)
+		return nil, service.TaskErrorWrapper(err, "rewrite_response_failed", http.StatusInternalServerError)
 	}
 	clientResponse, err = sjson.SetBytes(clientResponse, "task_id", info.PublicTaskID)
 	if err != nil {
-		return "", nil, service.TaskErrorWrapper(err, "rewrite_response_failed", http.StatusInternalServerError)
+		return nil, service.TaskErrorWrapper(err, "rewrite_response_failed", http.StatusInternalServerError)
 	}
 	if responseEnvelope.ID == "" && responseEnvelope.TaskID == "" && responseEnvelope.Data != nil {
 		clientResponse, err = sjson.SetBytes(clientResponse, "data.id", info.PublicTaskID)
 		if err != nil {
-			return "", nil, service.TaskErrorWrapper(err, "rewrite_response_failed", http.StatusInternalServerError)
+			return nil, service.TaskErrorWrapper(err, "rewrite_response_failed", http.StatusInternalServerError)
 		}
 		clientResponse, err = sjson.SetBytes(clientResponse, "data.task_id", info.PublicTaskID)
 		if err != nil {
-			return "", nil, service.TaskErrorWrapper(err, "rewrite_response_failed", http.StatusInternalServerError)
+			return nil, service.TaskErrorWrapper(err, "rewrite_response_failed", http.StatusInternalServerError)
 		}
 	}
-	c.Data(http.StatusOK, "application/json", clientResponse)
-	return upstreamTaskID, responseBody, nil
+	return &channel.TaskSubmitResponse{UpstreamTaskID: upstreamTaskID, TaskData: responseBody, ClientResponse: json.RawMessage(clientResponse)}, nil
 }
 
-func (a *TaskAdaptor) FetchTask(baseURL, key string, body map[string]any, proxy string) (*http.Response, error) {
-	taskID, ok := body["task_id"].(string)
-	if !ok || taskID == "" {
+func (a *TaskAdaptor) FetchTask(baseURL, key string, task *model.Task, proxy string) (*http.Response, error) {
+	taskID := task.GetUpstreamTaskID()
+	if taskID == "" {
 		return nil, errors.New("invalid task_id")
 	}
 
@@ -248,7 +247,7 @@ func (a *TaskAdaptor) FetchTask(baseURL, key string, body map[string]any, proxy 
 	return client.Do(req)
 }
 
-func (a *TaskAdaptor) ParseTaskResult(respBody []byte) (*relaycommon.TaskInfo, error) {
+func (a *TaskAdaptor) ParseTaskResult(_ *model.Task, _ *http.Response, respBody []byte) (*relaycommon.TaskInfo, error) {
 	result, err := parseResponse(respBody)
 	if err != nil {
 		return nil, errors.Wrap(err, "unmarshal task result failed")

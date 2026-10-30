@@ -20,12 +20,12 @@ func TestBuildRequestUsesChongPlusProtocol(t *testing.T) {
 	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
 	ctx.Set("task_request", relaycommon.TaskSubmitReq{Prompt: "A cat runs on grass", Seconds: "8"})
 	adaptor := &TaskAdaptor{}
-	adaptor.Init(&relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{ChannelBaseUrl: "https://api2.chongplus.plus"}})
+	adaptor.Init(&relaycommon.RelayInfo{TaskRelayInfo: &relaycommon.TaskRelayInfo{}, ChannelMeta: &relaycommon.ChannelMeta{ChannelBaseUrl: "https://api2.chongplus.plus"}})
 
 	requestURL, err := adaptor.BuildRequestURL(nil)
 	require.NoError(t, err)
 	assert.Equal(t, "https://api2.chongplus.plus/v1/videos/generations", requestURL)
-	body, err := adaptor.BuildRequestBody(ctx, &relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{UpstreamModelName: "grok-imagine-video"}})
+	body, err := adaptor.BuildRequestBody(ctx, &relaycommon.RelayInfo{TaskRelayInfo: &relaycommon.TaskRelayInfo{}, ChannelMeta: &relaycommon.ChannelMeta{UpstreamModelName: "grok-imagine-video"}})
 	require.NoError(t, err)
 	data, err := io.ReadAll(body)
 	require.NoError(t, err)
@@ -40,7 +40,7 @@ func TestEstimateBillingRespectsVideoBillingMode(t *testing.T) {
 	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
 	ctx.Set("task_request", relaycommon.TaskSubmitReq{Seconds: "8"})
 	adaptor := &TaskAdaptor{}
-	info := &relaycommon.RelayInfo{OriginModelName: "grok-imagine-video-1.5"}
+	info := &relaycommon.RelayInfo{TaskRelayInfo: &relaycommon.TaskRelayInfo{}, OriginModelName: "grok-imagine-video-1.5"}
 
 	require.NoError(t, ratio_setting.UpdateVideoBillingModeByJSONString(`{}`))
 	t.Cleanup(func() {
@@ -60,7 +60,7 @@ func TestBuildGrokImagineVideo15FirstFrameRequest(t *testing.T) {
 		Images: []string{"https://example.com/first-frame.png"},
 	})
 
-	body, err := (&TaskAdaptor{}).BuildRequestBody(ctx, &relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{
+	body, err := (&TaskAdaptor{}).BuildRequestBody(ctx, &relaycommon.RelayInfo{TaskRelayInfo: &relaycommon.TaskRelayInfo{}, ChannelMeta: &relaycommon.ChannelMeta{
 		UpstreamModelName: "grok-imagine-video-1.5",
 	}})
 	require.NoError(t, err)
@@ -81,7 +81,7 @@ func TestBuildGrokImagineVideo15ReferenceImageRequest(t *testing.T) {
 		ReferenceImages: []string{"https://example.com/person.png", "https://example.com/product.png"},
 	})
 
-	body, err := (&TaskAdaptor{}).BuildRequestBody(ctx, &relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{
+	body, err := (&TaskAdaptor{}).BuildRequestBody(ctx, &relaycommon.RelayInfo{TaskRelayInfo: &relaycommon.TaskRelayInfo{}, ChannelMeta: &relaycommon.ChannelMeta{
 		UpstreamModelName: "grok-imagine-video-1.5",
 	}})
 	require.NoError(t, err)
@@ -98,7 +98,7 @@ func TestBuildGrokImagineVideo15ReferenceImageRequest(t *testing.T) {
 }
 
 func TestParseTaskResultUsesChongPlusResponse(t *testing.T) {
-	result, err := (&TaskAdaptor{}).ParseTaskResult([]byte(`{"model":"grok-imagine-video","progress":100,"status":"done","video":{"duration":8,"url":"/v1/videos/request-id/content"}}`))
+	result, err := (&TaskAdaptor{}).ParseTaskResult(nil, nil, []byte(`{"model":"grok-imagine-video","progress":100,"status":"done","video":{"duration":8,"url":"/v1/videos/request-id/content"}}`))
 	require.NoError(t, err)
 	assert.Equal(t, "SUCCESS", string(result.Status))
 	assert.Equal(t, "100%", result.Progress)
@@ -133,7 +133,7 @@ func TestValidateGrokImagineVideo15ImageModes(t *testing.T) {
 			ctx.Request = httptest.NewRequest("POST", "/v1/videos", strings.NewReader(tt.body))
 			ctx.Request.Header.Set("Content-Type", "application/json")
 
-			taskErr := (&TaskAdaptor{}).ValidateRequestAndSetAction(ctx, &relaycommon.RelayInfo{
+			taskErr := (&TaskAdaptor{}).ValidateRequestAndSetAction(ctx, &relaycommon.RelayInfo{TaskRelayInfo: &relaycommon.TaskRelayInfo{},
 				ChannelMeta: &relaycommon.ChannelMeta{UpstreamModelName: "grok-imagine-video-1.5"},
 			})
 			require.NotNil(t, taskErr)

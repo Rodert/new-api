@@ -2,6 +2,7 @@ package grokvideo
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -157,15 +158,15 @@ func (a *TaskAdaptor) DoRequest(c *gin.Context, info *relaycommon.RelayInfo, bod
 	return channel.DoTaskApiRequest(a, c, info, body)
 }
 
-func (a *TaskAdaptor) DoResponse(c *gin.Context, resp *http.Response, info *relaycommon.RelayInfo) (string, []byte, *taskdto.TaskError) {
+func (a *TaskAdaptor) ParseResponse(c *gin.Context, resp *http.Response, info *relaycommon.RelayInfo) (*channel.TaskSubmitResponse, *taskdto.TaskError) {
 	body, err := io.ReadAll(resp.Body)
 	_ = resp.Body.Close()
 	if err != nil {
-		return "", nil, service.TaskErrorWrapper(err, "read_response_body_failed", http.StatusInternalServerError)
+		return nil, service.TaskErrorWrapper(err, "read_response_body_failed", http.StatusInternalServerError)
 	}
 	var envelope map[string]any
 	if err := common.Unmarshal(body, &envelope); err != nil {
-		return "", nil, service.TaskErrorWrapper(err, "unmarshal_response_body_failed", http.StatusInternalServerError)
+		return nil, service.TaskErrorWrapper(err, "unmarshal_response_body_failed", http.StatusInternalServerError)
 	}
 	taskID := stringValue(envelope["task_id"])
 	if taskID == "" {
@@ -178,23 +179,22 @@ func (a *TaskAdaptor) DoResponse(c *gin.Context, resp *http.Response, info *rela
 		}
 	}
 	if taskID == "" {
-		return "", nil, service.TaskErrorWrapper(errors.New("task_id is empty"), "invalid_response", http.StatusInternalServerError)
+		return nil, service.TaskErrorWrapper(errors.New("task_id is empty"), "invalid_response", http.StatusInternalServerError)
 	}
 	public, err := sjson.SetBytes(body, "id", info.PublicTaskID)
 	if err != nil {
-		return "", nil, service.TaskErrorWrapper(err, "rewrite_response_failed", http.StatusInternalServerError)
+		return nil, service.TaskErrorWrapper(err, "rewrite_response_failed", http.StatusInternalServerError)
 	}
 	public, _ = sjson.SetBytes(public, "task_id", info.PublicTaskID)
 	if _, ok := envelope["data"].(map[string]any); ok {
 		public, _ = sjson.SetBytes(public, "data.id", info.PublicTaskID)
 		public, _ = sjson.SetBytes(public, "data.task_id", info.PublicTaskID)
 	}
-	c.Data(http.StatusOK, "application/json", public)
-	return taskID, body, nil
+	return &channel.TaskSubmitResponse{UpstreamTaskID: taskID, TaskData: body, ClientResponse: json.RawMessage(public)}, nil
 }
 
-func (a *TaskAdaptor) FetchTask(baseURL, key string, body map[string]any, proxy string) (*http.Response, error) {
-	taskID := stringValue(body["task_id"])
+func (a *TaskAdaptor) FetchTask(baseURL, key string, task *model.Task, proxy string) (*http.Response, error) {
+	taskID := task.GetUpstreamTaskID()
 	if taskID == "" {
 		return nil, errors.New("invalid task_id")
 	}
@@ -211,7 +211,7 @@ func (a *TaskAdaptor) FetchTask(baseURL, key string, body map[string]any, proxy 
 	return client.Do(req)
 }
 
-func (a *TaskAdaptor) ParseTaskResult(body []byte) (*relaycommon.TaskInfo, error) {
+func (a *TaskAdaptor) ParseTaskResult(_ *model.Task, _ *http.Response, body []byte) (*relaycommon.TaskInfo, error) {
 	var envelope map[string]any
 	if err := common.Unmarshal(body, &envelope); err != nil {
 		return nil, err

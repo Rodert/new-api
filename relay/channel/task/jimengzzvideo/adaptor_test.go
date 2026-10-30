@@ -1,6 +1,7 @@
 package jimengzzvideo
 
 import (
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -75,11 +76,11 @@ func TestDoResponseKeepsUpstreamIDPrivate(t *testing.T) {
 	adaptor := &TaskAdaptor{}
 	resp := &http.Response{Body: io.NopCloser(strings.NewReader(`{"id":"video_upstream","status":"queued"}`))}
 
-	upstreamID, data, taskErr := adaptor.DoResponse(ctx, resp, &relaycommon.RelayInfo{TaskRelayInfo: &relaycommon.TaskRelayInfo{PublicTaskID: "task_public"}})
+	result, taskErr := adaptor.ParseResponse(ctx, resp, &relaycommon.RelayInfo{TaskRelayInfo: &relaycommon.TaskRelayInfo{PublicTaskID: "task_public"}})
 	require.Nil(t, taskErr)
-	assert.Equal(t, "video_upstream", upstreamID)
-	assert.JSONEq(t, `{"id":"video_upstream","status":"queued"}`, string(data))
-	assert.JSONEq(t, `{"id":"task_public","task_id":"task_public","status":"queued"}`, writer.Body.String())
+	assert.Equal(t, "video_upstream", result.UpstreamTaskID)
+	assert.JSONEq(t, `{"id":"video_upstream","status":"queued"}`, string(result.TaskData))
+	assert.JSONEq(t, `{"id":"task_public","task_id":"task_public","status":"queued"}`, string(result.ClientResponse.(json.RawMessage)))
 }
 
 func TestDoResponseKeepsNestedUpstreamIDPrivate(t *testing.T) {
@@ -89,10 +90,10 @@ func TestDoResponseKeepsNestedUpstreamIDPrivate(t *testing.T) {
 	adaptor := &TaskAdaptor{}
 	resp := &http.Response{Body: io.NopCloser(strings.NewReader(`{"data":{"id":"video_upstream","status":"queued"}}`))}
 
-	upstreamID, _, taskErr := adaptor.DoResponse(ctx, resp, &relaycommon.RelayInfo{TaskRelayInfo: &relaycommon.TaskRelayInfo{PublicTaskID: "task_public"}})
+	result, taskErr := adaptor.ParseResponse(ctx, resp, &relaycommon.RelayInfo{TaskRelayInfo: &relaycommon.TaskRelayInfo{PublicTaskID: "task_public"}})
 	require.Nil(t, taskErr)
-	assert.Equal(t, "video_upstream", upstreamID)
-	assert.JSONEq(t, `{"id":"task_public","task_id":"task_public","data":{"id":"task_public","task_id":"task_public","status":"queued"}}`, writer.Body.String())
+	assert.Equal(t, "video_upstream", result.UpstreamTaskID)
+	assert.JSONEq(t, `{"id":"task_public","task_id":"task_public","data":{"id":"task_public","task_id":"task_public","status":"queued"}}`, string(result.ClientResponse.(json.RawMessage)))
 }
 
 func TestParseTaskResultMapsUpstreamStatus(t *testing.T) {
@@ -112,7 +113,7 @@ func TestParseTaskResultMapsUpstreamStatus(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := adaptor.ParseTaskResult([]byte(tt.body))
+			got, err := adaptor.ParseTaskResult(nil, nil, []byte(tt.body))
 			require.NoError(t, err)
 			require.NotNil(t, got)
 			assert.Equal(t, string(tt.status), got.Status)

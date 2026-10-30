@@ -17,9 +17,9 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import assert from 'node:assert/strict'
-import { after, test } from 'node:test'
 
 import { Window } from 'happy-dom'
+import { afterAll, test } from 'vitest'
 
 const domWindow = new Window()
 const domGlobals = [
@@ -68,7 +68,7 @@ const reactTestGlobals = globalThis as typeof globalThis & {
 }
 reactTestGlobals.IS_REACT_ACT_ENVIRONMENT = true
 
-after(() => {
+afterAll(() => {
   domWindow.close()
 })
 

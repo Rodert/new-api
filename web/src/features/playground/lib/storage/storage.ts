@@ -16,6 +16,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import { useAuthStore } from '@/stores/auth-store'
+
 import {
   DEFAULT_CONFIG,
   DEFAULT_PARAMETER_ENABLED,
@@ -122,10 +124,10 @@ export type ImageWorkspaceMetadata = {
 }
 
 export type VideoWorkspaceMetadata = {
+  n?: number
   aspectRatio: string
   group: string
   model: string
-  n: number
   prompt: string
   resolution?: string
   grokVideoImageMode?: 'first_frame' | 'reference'
@@ -156,13 +158,29 @@ type PlaygroundWorkspace = {
 // Large base64 image responses can exceed the browser's localStorage quota.
 // Keep the current session usable when persistence is unavailable.
 let volatileImageWorkspaceItems: ImageWorkspaceItem[] = []
+let volatileImageWorkspaceOwner: number | undefined
 
 const TRUNCATED_CONTENT_SUFFIX = '\n\n[...]'
 const MIN_PREFIX_COLLAPSE_LENGTH = 2000
 const MIN_REPEATED_SECTION_COUNT = 3
 const SECTION_HEADING_LINE_PATTERN = /^#{2,6}\s+\d+\.\s+.+$/gm
 
-function readStoredValue(key: string): unknown | null {
+function getUserStorageKey(key: string): string | null {
+  // Legacy data has no owner; never assign it to the next signed-in account.
+  for (const legacyKey of Object.values(STORAGE_KEYS)) {
+    if (legacyKey !== STORAGE_KEYS.WORKSPACE) localStorage.removeItem(legacyKey)
+  }
+  const userId = useAuthStore.getState().auth.user?.id
+  if (volatileImageWorkspaceOwner !== userId) {
+    volatileImageWorkspaceItems = []
+    volatileImageWorkspaceOwner = userId
+  }
+  return userId == null ? null : `${key}:${userId}`
+}
+
+function readStoredValue(baseKey: string): unknown | null {
+  const key = getUserStorageKey(baseKey)
+  if (!key) return null
   const saved = localStorage.getItem(key)
   if (!saved) return null
 
@@ -170,11 +188,13 @@ function readStoredValue(key: string): unknown | null {
 }
 
 function readStoredMessagesValue(): unknown | null {
-  const saved = localStorage.getItem(STORAGE_KEYS.MESSAGES)
+  const key = getUserStorageKey(STORAGE_KEYS.MESSAGES)
+  if (!key) return null
+  const saved = localStorage.getItem(key)
   if (!saved) return null
 
   if (saved.length > MAX_STORED_MESSAGES_BYTES) {
-    localStorage.removeItem(STORAGE_KEYS.MESSAGES)
+    localStorage.removeItem(key)
     return null
   }
 
@@ -357,10 +377,8 @@ function writeWorkspace(workspace: PlaygroundWorkspace): void {
     },
   }
 
-  localStorage.setItem(
-    STORAGE_KEYS.WORKSPACE,
-    JSON.stringify(persistedWorkspace)
-  )
+  const key = getUserStorageKey(STORAGE_KEYS.WORKSPACE)
+  if (key) localStorage.setItem(key, JSON.stringify(persistedWorkspace))
 }
 
 function updateWorkspace(
@@ -705,6 +723,7 @@ export function loadImageWorkspaceResult(): ImageGenerationResponse | null {
 }
 
 export function loadImageWorkspaceItems(): ImageWorkspaceItem[] {
+  getUserStorageKey(STORAGE_KEYS.WORKSPACE)
   try {
     const seen = new Set<string>()
     return [...volatileImageWorkspaceItems, ...loadWorkspace().image.items]
@@ -1053,9 +1072,12 @@ export function savePlaygroundMode(mode: PlaygroundMode): void {
 /** Clear chat state while preserving explicitly managed media history. */
 export function clearPlaygroundData(): void {
   try {
-    localStorage.removeItem(STORAGE_KEYS.CONFIG)
-    localStorage.removeItem(STORAGE_KEYS.PARAMETER_ENABLED)
-    localStorage.removeItem(STORAGE_KEYS.MESSAGES)
+    const configKey = getUserStorageKey(STORAGE_KEYS.CONFIG)
+    if (configKey) localStorage.removeItem(configKey)
+    const parameterKey = getUserStorageKey(STORAGE_KEYS.PARAMETER_ENABLED)
+    if (parameterKey) localStorage.removeItem(parameterKey)
+    const messagesKey = getUserStorageKey(STORAGE_KEYS.MESSAGES)
+    if (messagesKey) localStorage.removeItem(messagesKey)
     updateWorkspace((workspace) => {
       const defaults = createWorkspace()
       return {

@@ -26,7 +26,7 @@ func TestBuildRequestBodyUsesGrokVideoProtocol(t *testing.T) {
 	})
 
 	adaptor := &TaskAdaptor{}
-	body, err := adaptor.BuildRequestBody(ctx, &relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{
+	body, err := adaptor.BuildRequestBody(ctx, &relaycommon.RelayInfo{TaskRelayInfo: &relaycommon.TaskRelayInfo{}, ChannelMeta: &relaycommon.ChannelMeta{
 		UpstreamModelName: "grok-image-video",
 	}})
 	require.NoError(t, err)
@@ -43,7 +43,7 @@ func TestBuildRequestBodyUsesGrokVideoProtocol(t *testing.T) {
 
 func TestParseTaskResultUsesDocumentedResponseFormat(t *testing.T) {
 	adaptor := &TaskAdaptor{}
-	result, err := adaptor.ParseTaskResult([]byte(`{
+	result, err := adaptor.ParseTaskResult(nil, nil, []byte(`{
 		"code": "success",
 		"data": {
 			"task_id": "upstream-task",
@@ -73,7 +73,7 @@ func TestValidateGrokVideo15Seconds(t *testing.T) {
 			ctx.Request = httptest.NewRequest("POST", "/v1/videos", strings.NewReader(`{"prompt":"A cinematic scene","seconds":"`+test.seconds+`"}`))
 			ctx.Request.Header.Set("Content-Type", "application/json")
 
-			taskErr := (&TaskAdaptor{}).ValidateRequestAndSetAction(ctx, &relaycommon.RelayInfo{
+			taskErr := (&TaskAdaptor{}).ValidateRequestAndSetAction(ctx, &relaycommon.RelayInfo{TaskRelayInfo: &relaycommon.TaskRelayInfo{},
 				ChannelMeta: &relaycommon.ChannelMeta{UpstreamModelName: "grok-video-1.5"},
 			})
 			if test.valid {
@@ -97,7 +97,7 @@ func TestBuildRequestBodyIncludesReferenceImages(t *testing.T) {
 	})
 
 	adaptor := &TaskAdaptor{}
-	body, err := adaptor.BuildRequestBody(ctx, &relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{
+	body, err := adaptor.BuildRequestBody(ctx, &relaycommon.RelayInfo{TaskRelayInfo: &relaycommon.TaskRelayInfo{}, ChannelMeta: &relaycommon.ChannelMeta{
 		UpstreamModelName: "grok-video-1.5",
 	}})
 	require.NoError(t, err)
@@ -140,7 +140,7 @@ func TestEstimateBillingUsesEffectiveSeconds(t *testing.T) {
 			ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
 			ctx.Set("task_request", test.request)
 
-			got := (&TaskAdaptor{}).EstimateBilling(ctx, &relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{
+			got := (&TaskAdaptor{}).EstimateBilling(ctx, &relaycommon.RelayInfo{TaskRelayInfo: &relaycommon.TaskRelayInfo{}, ChannelMeta: &relaycommon.ChannelMeta{
 				UpstreamModelName: test.upstreamModel,
 			}})
 			assert.Equal(t, map[string]float64{"seconds": test.wantSeconds}, got)
